@@ -8,18 +8,78 @@ import { Book, Filters } from '@/lib/types';
 import { supabase } from '@/lib/supabase/client';
 import styles from './page.module.css';
 
-export default function HomePage() {
+export default function LiteraturePage() {
   const [books, setBooks] = useState<Book[]>([]);
   const [filteredBooks, setFilteredBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const booksPerPage = 12;
 
-  // Функция фильтрации
-  const applyFilters = useCallback((filters: Filters) => {
+  const loadBooks = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Загрузка книг из Supabase...');
+      
+      // ТОЛЬКО загрузка из Supabase
+      const { data, error: supabaseError } = await supabase
+        .from('books')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (supabaseError) {
+        console.error('Ошибка Supabase:', supabaseError);
+        throw new Error(`Ошибка Supabase: ${supabaseError.message}`);
+      }
+
+      console.log('Данные получены из Supabase:', data);
+      
+      if (!data || data.length === 0) {
+        console.log('В базе данных нет книг');
+        setBooks([]);
+        setFilteredBooks([]);
+        setError('В базе данных пока нет книг. Добавьте книги через админ-панель Supabase.');
+      } else {
+        // Преобразуем данные к типу Book
+        const booksData: Book[] = data.map(book => ({
+          id: book.id,
+          title: book.title,
+          author: book.author,
+          description: book.description || '',
+          year: book.year,
+          pages: book.pages,
+          pdf_url: book.pdf_url || '#',
+          category: book.category || 'Не указана',
+          tags: book.tags || [],
+          created_at: book.created_at,
+          updated_at: book.updated_at
+        }));
+        
+        console.log('Преобразованные книги:', booksData);
+        setBooks(booksData);
+        setFilteredBooks(booksData);
+      }
+    } catch (error) {
+      console.error('Error loading books from Supabase:', error);
+      const err = error as Error;
+      setError(`Не удалось загрузить книги из базы данных: ${err.message}`);
+      setBooks([]);
+      setFilteredBooks([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBooks();
+  }, [loadBooks]);
+
+  const handleFilterChange = (filters: Filters) => {
     let filtered = [...books];
 
-    // Поиск
+    // Поиск по названию и автору
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
       filtered = filtered.filter(book => 
@@ -29,28 +89,28 @@ export default function HomePage() {
       );
     }
 
-    // Категории
+    // Фильтр по категориям
     if (filters.categories.length > 0) {
       filtered = filtered.filter(book => 
         filters.categories.includes(book.category)
       );
     }
 
-    // Авторы
+    // Фильтр по авторам (НОВЫЙ ФИЛЬТР вместо языка)
     if (filters.authors.length > 0) {
       filtered = filtered.filter(book => 
         filters.authors.includes(book.author)
       );
     }
 
-    // Теги
+    // Фильтр по тегам
     if (filters.tags.length > 0) {
       filtered = filtered.filter(book => 
         book.tags.some(tag => filters.tags.includes(tag))
       );
     }
 
-    // Год
+    // Фильтр по году
     if (filters.year !== 'all') {
       switch (filters.year) {
         case '2025':
@@ -68,7 +128,7 @@ export default function HomePage() {
       }
     }
 
-    // Диапазон лет
+    // Фильтр по диапазону лет
     if (filters.yearFrom) {
       const yearFromNum = parseInt(filters.yearFrom);
       if (!isNaN(yearFromNum)) {
@@ -84,85 +144,15 @@ export default function HomePage() {
 
     setFilteredBooks(filtered);
     setCurrentPage(1);
-  }, [books]);
-
-  // Дебаунс функция
-  const useDebounce = (callback: (filters: Filters) => void, delay: number) => {
-    return useCallback((filters: Filters) => {
-      const timeoutId = setTimeout(() => {
-        callback(filters);
-      }, delay);
-      
-      return () => clearTimeout(timeoutId);
-    }, [callback, delay]);
   };
 
-  // Дебаунс для фильтрации
-  const debouncedHandleFilterChange = useDebounce(applyFilters, 300);
-
-  const handleFilterChange = useCallback((filters: Filters) => {
-    debouncedHandleFilterChange(filters);
-  }, [debouncedHandleFilterChange]);
-
-  // Загружаем книги
-  useEffect(() => {
-    async function loadBooks() {
-      try {
-        const { data, error } = await supabase
-          .from('books')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(50);
-
-        if (error) {
-          console.error('Supabase error:', error);
-          // Используем демо-данные
-          const demoBooks: Book[] = [
-            {
-              id: '1',
-              title: 'Современный JavaScript 2025',
-              author: 'Алексей Петров',
-              description: 'Полное руководство по современному JavaScript с примерами и лучшими практиками.',
-              year: 2025,
-              pages: 450,
-              pdf_url: 'https://example.com/javascript-2025.pdf',
-              category: 'Программирование',
-              tags: ['JavaScript', 'ES2025', 'Frontend'],
-              created_at: '2024-01-15',
-              updated_at: '2024-01-15'
-            },
-            {
-              id: '2',
-              title: 'PostgreSQL для разработчиков',
-              author: 'Мария Сидорова',
-              description: 'Практическое руководство по работе с PostgreSQL от основ до продвинутых техник.',
-              year: 2024,
-              pages: 320,
-              pdf_url: 'https://example.com/postgresql.pdf',
-              category: 'Базы данных',
-              tags: ['PostgreSQL', 'SQL', 'Базы данных'],
-              created_at: '2024-02-20',
-              updated_at: '2024-02-20'
-            }
-          ];
-          setBooks(demoBooks);
-          setFilteredBooks(demoBooks);
-        } else if (data) {
-          setBooks(data);
-          setFilteredBooks(data);
-        }
-      } catch (error) {
-        console.error('Error loading books:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadBooks();
-  }, []);
-
   const handleBookSelect = (book: Book) => {
-    window.open(book.pdf_url, '_blank');
+    // Открываем PDF в новой вкладке
+    if (book.pdf_url && book.pdf_url !== '#') {
+      window.open(book.pdf_url, '_blank');
+    } else {
+      alert('Ссылка на PDF не указана для этой книги');
+    }
   };
 
   // Пагинация
@@ -186,14 +176,63 @@ export default function HomePage() {
             <h1>Каталог технической литературы</h1>
             <p className={styles.booksCount}>
               Показано <span>{filteredBooks.length}</span> из <span>{books.length}</span> книг
+              {error && ' (из базы данных)'}
             </p>
           </div>
+          <button 
+            className={styles.refreshBtn}
+            onClick={loadBooks}
+            disabled={loading}
+            title="Обновить список книг"
+          >
+            <i className={`fas fa-sync-alt ${loading ? 'fa-spin' : ''}`}></i>
+            {loading ? ' Загрузка...' : ' Обновить'}
+          </button>
         </div>
+
+        {error && (
+          <div className={styles.errorContainer}>
+            <i className="fas fa-exclamation-triangle"></i>
+            <p>{error}</p>
+            <div className={styles.errorActions}>
+              <button onClick={loadBooks} className={styles.retryBtn}>
+                Попробовать снова
+              </button>
+              <a 
+                href="https://supabase.com/dashboard" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className={styles.supabaseLink}
+              >
+                Открыть Supabase
+              </a>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div className={styles.loadingState}>
-            <div className="loading"></div>
-            <p>Загрузка книг...</p>
+            <div className={styles.loadingSpinner}></div>
+            <p>Загрузка книг из базы данных...</p>
+          </div>
+        ) : books.length === 0 ? (
+          <div className={styles.emptyState}>
+            <i className="fas fa-database"></i>
+            <h3>База данных пуста</h3>
+            <p>Добавьте книги через админ-панель Supabase</p>
+            <div className={styles.emptyActions}>
+              <button onClick={loadBooks} className={styles.retryBtn}>
+                Проверить снова
+              </button>
+              <a 
+                href="https://supabase.com/dashboard" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className={styles.supabaseLink}
+              >
+                Перейти в Supabase Dashboard
+              </a>
+            </div>
           </div>
         ) : (
           <>
@@ -236,7 +275,7 @@ export default function HomePage() {
                 })}
                 
                 {totalPages > 5 && currentPage < totalPages - 2 && (
-                  <span style={{ color: 'var(--text-secondary)', padding: '0 0.5rem' }}>...</span>
+                  <span className={styles.pageDots}>...</span>
                 )}
                 
                 {totalPages > 5 && currentPage < totalPages - 2 && (
