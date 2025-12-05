@@ -1,4 +1,3 @@
-// src/app/admin-panel/EditBookForm.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -22,11 +21,10 @@ export default function EditBookForm({ book, onSubmit, onCancel, uploadingPDF }:
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Обновляем форму при изменении книги
+
   useEffect(() => {
     console.log('EditBookForm: Инициализация формы для книги:', book.title);
     
-    // Убедимся, что все поля имеют значения
     const safeBook: Book = {
       ...book,
       category: book.category || 'programming',

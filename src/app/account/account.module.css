@@ -1,4 +1,4 @@
-/* app/account/account.module.css */
+
 .accountContainer {
   max-width: 1200px;
   margin: 0 auto;
@@ -13,7 +13,7 @@
   overflow: hidden;
 }
 
-/* Profile Header */
+
 .profileHeader {
   display: flex;
   justify-content: space-between;
@@ -190,7 +190,6 @@
   color: var(--text-primary);
 }
 
-/* Edit Form */
 .editForm .formGroup {
   margin-bottom: 1.5rem;
 }
@@ -422,7 +421,7 @@
   transform: translateY(-2px);
 }
 
-/* Stats Grid */
+
 .statsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -463,7 +462,6 @@
   font-size: 0.9rem;
 }
 
-/* Responsive */
 @media (max-width: 768px) {
   .accountContainer {
     padding: 1rem;

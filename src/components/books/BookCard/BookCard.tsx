@@ -9,10 +9,9 @@ import Link from 'next/link';
 
 interface BookCardProps {
   book: Book;
-  // onRead: (book: Book) => void; ← УДАЛИТЬ ЭТУ СТРОЧКУ
 }
 
-export default function BookCard({ book }: BookCardProps) { // ← Убрали onRead
+export default function BookCard({ book }: BookCardProps) {
   const { user } = useAuth();
   const [isFavorite, setIsFavorite] = useState(false);
   const [isLoading, setIsLoading] = useState(false);

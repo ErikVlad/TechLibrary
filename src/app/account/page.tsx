@@ -1,4 +1,3 @@
-// app/account/page.tsx - исправленная версия
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
@@ -138,7 +137,7 @@ export default function AccountPage() {
       }
       
       if (existingProfile) {
-        // Профиль существует - обновляем
+        // Профиль обновляем
         console.log('Обновляем существующий профиль');
         result = await supabase
           .from('profiles')

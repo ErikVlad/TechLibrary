@@ -1,4 +1,3 @@
-// src/app/admin-panel/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -30,8 +29,6 @@ interface BookData {
   tags: string[];
   pdf_url: string | null;
   created_at: string;
-  // Добавляем только если столбец есть в таблице
-  // cover_url?: string | null;
 }
 
 // Тип для данных обновления книги
@@ -44,8 +41,6 @@ interface UpdateBookData {
   category: string;
   tags: string[];
   pdf_url: string | null;
-  // Добавляем только если столбец есть в таблице
-  // cover_url?: string | null;
 }
 
 export default function AdminPanel() {
@@ -63,8 +58,6 @@ export default function AdminPanel() {
       try {
         debugLog('Проверка Storage...');
         
-        // Просто проверяем, доступен ли bucket
-        // Убрали неиспользуемую переменную data
         const { error } = await supabase.storage
           .from('pdf-books')
           .list();
@@ -118,7 +111,6 @@ export default function AdminPanel() {
         category: book.category || 'programming',
         tags: book.tags || [],
         pdf_url: book.pdf_url || null,
-        // cover_url может отсутствовать в таблице
         ...(book.cover_url !== undefined && { cover_url: book.cover_url || null }),
         created_at: book.created_at,
         updated_at: book.updated_at,
@@ -210,11 +202,6 @@ export default function AdminPanel() {
       created_at: new Date().toISOString(),
     };
     
-    // Добавляем cover_url только если столбец есть в таблице
-    // Проверьте в Supabase: есть ли столбец cover_url в таблице books
-    // Если нет, удалите эту строку:
-    // bookData.cover_url = newBook.cover_url || null;
-
     debugLog('Подготовленные данные:', bookData);
 
     try {
@@ -269,7 +256,6 @@ export default function AdminPanel() {
           category: data[0].category || 'programming',
           tags: data[0].tags || [],
           pdf_url: data[0].pdf_url || null,
-          // cover_url может отсутствовать
           ...(data[0].cover_url !== undefined && { cover_url: data[0].cover_url || null }),
           created_at: data[0].created_at,
           updated_at: data[0].updated_at,
@@ -321,11 +307,7 @@ export default function AdminPanel() {
         pdf_url: pdfUrl,
       };
       
-      // Добавляем cover_url только если столбец есть
-      // Если столбца нет, удалите эту строку:
-      // if (updatedBook.cover_url !== undefined) {
-      //   (updateData as any).cover_url = updatedBook.cover_url;
-      // }
+      
       
       debugLog('Данные для обновления:', updateData);
       

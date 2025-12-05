@@ -1,8 +1,7 @@
-// src/app/admin-panel/BookList.tsx
 'use client';
 
 import { Book } from '@/lib/types';
-import Image from 'next/image'; // ← ДОБАВЬТЕ ЭТО
+import Image from 'next/image'; 
 
 interface BookListProps {
   books: Book[];
