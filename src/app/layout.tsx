@@ -31,9 +31,11 @@ export default function RootLayout({
       <body className={inter.className}>
         <ThemeProvider>
           <AuthProvider>
-            <Header />
-            <main>{children}</main>
-            <Footer />
+            <div className="min-h-screen flex flex-col">
+              <Header />
+              <main className="flex-grow">{children}</main>
+              <Footer />
+            </div>
           </AuthProvider>
         </ThemeProvider>
       </body>
