@@ -6,7 +6,6 @@ import FiltersSidebar from '@/components/books/FiltersSidebar/FiltersSidebar';
 import BookGrid from '@/components/books/BookGrid/BookGrid';
 import { Book, Filters } from '@/lib/types';
 import { supabase } from '@/lib/supabase/client';
-import { useAuth } from '@/components/providers/AuthProvider';
 import styles from './page.module.css';
 
 export default function HomePage() {
@@ -15,9 +14,6 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const booksPerPage = 12;
-  
-  // ДОБАВИЛИ ЭТУ СТРОКУ
-  const { user } = useAuth();
 
   // Функция фильтрации
   const applyFilters = useCallback((filters: Filters) => {
@@ -29,28 +25,28 @@ export default function HomePage() {
       filtered = filtered.filter(book => 
         book.title.toLowerCase().includes(searchLower) ||
         book.author.toLowerCase().includes(searchLower) ||
-        (book.description && book.description.toLowerCase().includes(searchLower)) // ИСПРАВЛЕНО: проверка на undefined
+        (book.description && book.description.toLowerCase().includes(searchLower)) // ИСПРАВЛЕНО
       );
     }
 
     // Категории
     if (filters.categories.length > 0) {
       filtered = filtered.filter(book => 
-        book.category && filters.categories.includes(book.category) // ИСПРАВЛЕНО: проверка на undefined
+        book.category && filters.categories.includes(book.category) // ИСПРАВЛЕНО
       );
     }
 
     // Авторы
     if (filters.authors.length > 0) {
       filtered = filtered.filter(book => 
-        book.author && filters.authors.includes(book.author) // ИСПРАВЛЕНО: проверка на undefined
+        book.author && filters.authors.includes(book.author) // ИСПРАВЛЕНО
       );
     }
 
     // Теги
     if (filters.tags.length > 0) {
       filtered = filtered.filter(book => 
-        book.tags && book.tags.some((tag: string) => filters.tags.includes(tag)) // ИСПРАВЛЕНО: проверка на undefined
+        book.tags && book.tags.some((tag: string) => filters.tags.includes(tag)) // ИСПРАВЛЕНО
       );
     }
 
@@ -163,26 +159,30 @@ export default function HomePage() {
     }
 
     loadBooks();
-  }, [user]); // ИЗМЕНИЛИ: добавили [user] вместо []
+  }, []);
 
-  // ДОБАВИЛИ ЭТОТ useEffect ДЛЯ СЛУШАТЕЛЯ АВТОРИЗАЦИИ
+  // ДОБАВИМ ЭТОТ БЛОК ДЛЯ ПЕРЕЗАГРУЗКИ ПРИ АВТОРИЗАЦИИ
   useEffect(() => {
-    // Слушаем изменения авторизации
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event) => {
-        console.log('Auth state changed:', event);
-        // При изменении авторизации (вход/выход) обновляем страницу
+        console.log('Auth event:', event);
+        // При входе или выходе перезагружаем страницу
         if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-          window.location.reload(); // Самый простой способ перезагрузить книги
+          // Самый простой и надежный способ
+          setTimeout(() => {
+            window.location.reload();
+          }, 500);
         }
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleBookSelect = (book: Book) => {
-    if (book.pdf_url) { // ИСПРАВЛЕНО: проверка на существование
+    if (book.pdf_url) { // ИСПРАВЛЕНО
       window.open(book.pdf_url, '_blank');
     }
   };
