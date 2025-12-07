@@ -5,11 +5,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/components/providers/AuthProvider';
 import styles from './BookCard.module.css';
-import Link from 'next/link';
 
 interface BookCardProps {
   book: Book;
-  onRead: (book: Book) => void; // Добавляем пропс
+  onRead: (book: Book) => void;
 }
 
 export default function BookCard({ book, onRead }: BookCardProps) {
@@ -112,7 +111,6 @@ export default function BookCard({ book, onRead }: BookCardProps) {
 
   const handleInfoClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    // Здесь будет логика для модального окна с деталями
     console.log('Book info:', book);
   };
 
@@ -127,7 +125,7 @@ export default function BookCard({ book, onRead }: BookCardProps) {
     <div className={styles.bookCard}>
       <div className={styles.bookImage}>
         <i className="fas fa-code"></i>
-        {book.year >= 2024 && (
+        {book.year && book.year >= 2024 && (
           <span className={styles.bookBadge}>Новинка</span>
         )}
       </div>
@@ -139,7 +137,7 @@ export default function BookCard({ book, onRead }: BookCardProps) {
         </p>
         
         <div className={styles.bookTags}>
-          {book.tags.slice(0, 3).map(tag => (
+          {book.tags && book.tags.slice(0, 3).map(tag => (
             <span key={tag} className={styles.bookTag}>{tag}</span>
           ))}
         </div>
