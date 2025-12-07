@@ -16,16 +16,18 @@ export default function ClientBooksSection({ initialBooks }: ClientBooksSectionP
   const booksPerPage = 12;
 
   const handleBookSelect = (book: Book) => {
-    window.open(book.pdf_url, '_blank');
+    if (book.pdf_url) {
+      window.open(book.pdf_url, '_blank');
+    } else {
+      console.error('PDF URL не найден');
+    }
   };
 
-  // Пагинация
   const totalPages = Math.ceil(filteredBooks.length / booksPerPage);
   const startIndex = (currentPage - 1) * booksPerPage;
   const endIndex = startIndex + booksPerPage;
   const currentBooks = filteredBooks.slice(startIndex, endIndex);
 
-  // Обновляем фильтры при изменении начальных книг
   useEffect(() => {
     setFilteredBooks(books);
   }, [books]);
@@ -57,7 +59,7 @@ export default function ClientBooksSection({ initialBooks }: ClientBooksSectionP
           </button>
           
           {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-            let pageNum;
+            let pageNum: number;
             if (totalPages <= 5) {
               pageNum = i + 1;
             } else if (currentPage <= 3) {
@@ -80,7 +82,7 @@ export default function ClientBooksSection({ initialBooks }: ClientBooksSectionP
           })}
           
           {totalPages > 5 && currentPage < totalPages - 2 && (
-            <span style={{ color: 'var(--text-secondary)', padding: '0 0.5rem' }}>...</span>
+            <span className={styles.ellipsis}>...</span>
           )}
           
           {totalPages > 5 && currentPage < totalPages - 2 && (
