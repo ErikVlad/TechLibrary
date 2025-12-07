@@ -15,17 +15,6 @@ export default function LiteraturePage() {
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const booksPerPage = 12;
-  
-  // Состояние фильтров - управляем ими здесь
-  const [activeFilters, setActiveFilters] = useState<Filters>({
-    search: '',
-    categories: [],
-    year: 'all',
-    tags: [],
-    authors: [],
-    yearFrom: '',
-    yearTo: ''
-  });
 
   // Загрузка книг
   const loadBooks = useCallback(async () => {
@@ -59,9 +48,9 @@ export default function LiteraturePage() {
           updated_at: book.updated_at
         }));
         
+        console.log('Загружено книг:', booksData.length);
         setBooks(booksData);
-        // Показываем ВСЕ книги при первой загрузке
-        setFilteredBooks(booksData);
+        setFilteredBooks(booksData); // Сразу показываем ВСЕ книги
       }
     } catch (error) {
       console.error('Error loading books:', error);
@@ -151,19 +140,14 @@ export default function LiteraturePage() {
     return filtered;
   }, []);
 
-  // Применяем фильтры при их изменении
-  useEffect(() => {
-    if (books.length > 0) {
-      const filtered = filterBooks(books, activeFilters);
-      setFilteredBooks(filtered);
-      setCurrentPage(1);
-    }
-  }, [books, activeFilters, filterBooks]);
-
-  // Обработчик от FiltersSidebar
+  // Обработчик изменения фильтров
   const handleFilterChange = useCallback((filters: Filters) => {
-    setActiveFilters(filters);
-  }, []);
+    console.log('Получены фильтры:', filters);
+    const filtered = filterBooks(books, filters);
+    console.log('Отфильтровано книг:', filtered.length);
+    setFilteredBooks(filtered);
+    setCurrentPage(1);
+  }, [books, filterBooks]);
 
   const handleBookSelect = (book: Book) => {
     if (book.pdf_url && book.pdf_url !== '#') {
