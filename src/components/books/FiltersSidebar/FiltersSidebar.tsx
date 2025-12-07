@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Book, Filters } from '@/lib/types';
-import { useRouter } from 'next/navigation';
 import styles from './FiltersSidebar.module.css';
 
 interface FiltersSidebarProps {
@@ -11,9 +10,7 @@ interface FiltersSidebarProps {
 }
 
 export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebarProps) {
-  const router = useRouter();
-  
-  // ЛОКАЛЬНЫЕ состояния для UI
+  // ЛОКАЛЬНЫЕ состояния для UI - ВСЕ ПУСТЫЕ
   const [search, setSearch] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedYear, setSelectedYear] = useState<string>('all');
@@ -62,25 +59,15 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
       yearTo
     };
     
-    // Обновляем URL
-    const params = new URLSearchParams();
-    if (search) params.set('search', search);
-    if (selectedCategories.length > 0) params.set('categories', selectedCategories.join(','));
-    if (selectedYear !== 'all') params.set('year', selectedYear);
-    if (selectedTags.length > 0) params.set('tags', selectedTags.join(','));
-    if (selectedAuthors.length > 0) params.set('authors', selectedAuthors.join(','));
-    if (yearFrom) params.set('yearFrom', yearFrom);
-    if (yearTo) params.set('yearTo', yearTo);
-    
-    const newUrl = `${window.location.pathname}?${params.toString()}`;
-    router.replace(newUrl, { scroll: false });
-    
-    // Передаем фильтры наверх
+    console.log('Фильтры применены:', filters);
     onFilterChange(filters);
   };
 
   // Очистить фильтры
   const handleClearFilters = () => {
+    console.log('Фильтры очищены');
+    
+    // Сбрасываем локальные состояния
     setSearch('');
     setSelectedCategories([]);
     setSelectedYear('all');
@@ -89,10 +76,7 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
     setYearFrom('');
     setYearTo('');
     
-    // Очищаем URL
-    router.replace(window.location.pathname, { scroll: false });
-    
-    // Передаем пустые фильтры наверх
+    // Отправляем пустые фильтры
     onFilterChange({
       search: '',
       categories: [],
@@ -131,33 +115,19 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    setSearch(value);
+    
+    if (searchTimeout) clearTimeout(searchTimeout);
+    
+    const timeout = setTimeout(() => {
+      setSearch(value);
+    }, 300);
+    
+    setSearchTimeout(timeout);
   };
 
-  // Загрузка фильтров из URL при монтировании (только UI)
+  // Инициализация - ничего не делаем с URL
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      
-      const urlSearch = params.get('search') || '';
-      const urlCategories = params.get('categories')?.split(',').filter(Boolean) || [];
-      const urlYear = params.get('year') || 'all';
-      const urlTags = params.get('tags')?.split(',').filter(Boolean) || [];
-      const urlAuthors = params.get('authors')?.split(',').filter(Boolean) || [];
-      const urlYearFrom = params.get('yearFrom') || '';
-      const urlYearTo = params.get('yearTo') || '';
-      
-      setSearch(urlSearch);
-      setSelectedCategories(urlCategories);
-      setSelectedYear(urlYear);
-      setSelectedTags(urlTags);
-      setSelectedAuthors(urlAuthors);
-      setYearFrom(urlYearFrom);
-      setYearTo(urlYearTo);
-    }
-  }, []);
-
-  useEffect(() => {
+    // Ничего не читаем из URL!
     return () => {
       if (searchTimeout) clearTimeout(searchTimeout);
     };
