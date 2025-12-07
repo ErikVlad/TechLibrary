@@ -1,37 +1,87 @@
-// app/literature/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import SidebarLayout from '@/components/main-block/sidebar/SidebarLayout';
 import FiltersSidebar from '@/components/books/FiltersSidebar/FiltersSidebar';
 import BookGrid from '@/components/books/BookGrid/BookGrid';
 import { Book, Filters } from '@/lib/types';
 import { supabase } from '@/lib/supabase/client';
-import DebugBooks from '@/components/books/DebugBooks';
 import styles from './page.module.css';
 
 export default function LiteraturePage() {
-  console.log('🚀 LiteraturePage: Начало рендера');
+  console.log('🚀 LiteraturePage: Рендер');
   
   const [books, setBooks] = useState<Book[]>([]);
   const [filteredBooks, setFilteredBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Загрузка книг (только один раз)
+  // Функция фильтрации
+  const filterBooks = useCallback((booksList: Book[], filters: Filters): Book[] => {
+    if (!booksList || booksList.length === 0) return [];
+    
+    console.log('🔧 filterBooks: Начало фильтрации', {
+      книгДо: booksList.length,
+      фильтры: filters
+    });
+    
+    let filtered = [...booksList];
+
+    // Поиск
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      filtered = filtered.filter(book => 
+        (book.title?.toLowerCase().includes(searchLower)) ||
+        (book.author?.toLowerCase().includes(searchLower)) ||
+        (book.description?.toLowerCase().includes(searchLower))
+      );
+    }
+
+    // Категории
+    if (filters.categories?.length > 0) {
+      filtered = filtered.filter(book => 
+        book.category && filters.categories.includes(book.category)
+      );
+    }
+
+    // Год
+    if (filters.year && filters.year !== 'all') {
+      switch (filters.year) {
+        case '2025':
+          filtered = filtered.filter(book => book.year === 2025);
+          break;
+        case '2024':
+          filtered = filtered.filter(book => book.year === 2024);
+          break;
+        case '2023-2021':
+          filtered = filtered.filter(book => book.year >= 2021 && book.year <= 2023);
+          break;
+        case 'old':
+          filtered = filtered.filter(book => book.year < 2021);
+          break;
+      }
+    }
+
+    console.log('🔧 filterBooks: Конец фильтрации', {
+      книгПосле: filtered.length
+    });
+    
+    return filtered;
+  }, []);
+
+  // Загрузка книг
   useEffect(() => {
-    console.log('📚 LiteraturePage: useEffect запущен');
+    console.log('📚 LiteraturePage: Начало загрузки книг');
     
     let isMounted = true;
     
     const loadBooks = async () => {
       try {
-        console.log('🔍 LiteraturePage: Запрос к Supabase');
         const { data } = await supabase
           .from('books')
           .select('*')
           .order('created_at', { ascending: false });
 
-        console.log('✅ LiteraturePage: Получено книг:', data?.length || 0);
+        console.log('✅ LiteraturePage: Книги получены:', data?.length || 0);
         
         if (isMounted) {
           if (data && data.length > 0) {
@@ -49,14 +99,15 @@ export default function LiteraturePage() {
               updated_at: book.updated_at
             }));
             
-            console.log('💾 LiteraturePage: Устанавливаю книги в состояние');
             setBooks(booksData);
+            // ПОКАЗЫВАЕМ ВСЕ КНИГИ БЕЗ ФИЛЬТРАЦИИ
             setFilteredBooks(booksData);
+            console.log('✅ LiteraturePage: Книги установлены:', booksData.length);
           }
           setLoading(false);
         }
       } catch (error) {
-        console.error('❌ LiteraturePage: Ошибка загрузки:', error);
+        console.error('❌ LiteraturePage: Ошибка:', error);
         if (isMounted) {
           setLoading(false);
         }
@@ -66,30 +117,37 @@ export default function LiteraturePage() {
     loadBooks();
     
     return () => {
-      console.log('🧹 LiteraturePage: Очистка эффекта');
+      console.log('🧹 LiteraturePage: Очистка');
       isMounted = false;
     };
-  }, []); // Пустой массив - только при монтировании
+  }, []); // Только при монтировании
 
-  // Простейший обработчик фильтров
-  const handleFilterChange = (filters: Filters) => {
-    console.log('🔧 LiteraturePage: Получены фильтры', filters);
+  // Обработчик фильтров
+  const handleFilterChange = useCallback((filters: Filters) => {
+    console.log('🔧 LiteraturePage: Получены фильтры от sidebar', filters);
     
-    // Если фильтры не пустые - очищаем книги
-    if (filters.search || 
-        filters.categories.length > 0 || 
-        filters.authors.length > 0 ||
-        filters.tags.length > 0 ||
-        filters.year !== 'all' ||
-        filters.yearFrom ||
-        filters.yearTo) {
-      console.log('🎯 LiteraturePage: Фильтры не пустые - очищаю книги');
-      setFilteredBooks([]);
-    } else {
-      console.log('🎯 LiteraturePage: Фильтры пустые - показываю все книги');
+    // Проверяем, пустые ли фильтры
+    const isEmpty = !filters.search && 
+                    filters.categories.length === 0 && 
+                    filters.tags.length === 0 &&
+                    filters.authors.length === 0 &&
+                    filters.year === 'all' &&
+                    !filters.yearFrom &&
+                    !filters.yearTo;
+    
+    console.log('🔧 LiteraturePage: Фильтры пустые?', isEmpty);
+    
+    if (isEmpty) {
+      // Показываем ВСЕ книги
+      console.log('🔧 LiteraturePage: Показываю все книги');
       setFilteredBooks(books);
+    } else {
+      // Применяем фильтры
+      const filtered = filterBooks(books, filters);
+      console.log('🔧 LiteraturePage: Применяю фильтры, результат:', filtered.length);
+      setFilteredBooks(filtered);
     }
-  };
+  }, [books, filterBooks]);
 
   const handleBookSelect = (book: Book) => {
     if (book.pdf_url && book.pdf_url !== '#') {
@@ -97,7 +155,7 @@ export default function LiteraturePage() {
     }
   };
 
-  console.log('🔄 LiteraturePage: Конец рендера', {
+  console.log('🔄 LiteraturePage: Статус', {
     loading,
     booksCount: books.length,
     filteredCount: filteredBooks.length
@@ -112,14 +170,13 @@ export default function LiteraturePage() {
         />
       }
     >
-      <DebugBooks />
-      
       <div className={styles.booksSection}>
         <div className={styles.booksHeader}>
           <h1>Каталог технической литературы</h1>
           <p className={styles.booksCount}>
-            Книг загружено: <span>{books.length}</span>, 
-            Показано: <span>{filteredBooks.length}</span>
+            <span style={{ color: filteredBooks.length === 0 ? 'red' : 'inherit' }}>
+              Показано: {filteredBooks.length}
+            </span> из <span>{books.length}</span> книг
           </p>
         </div>
 
@@ -127,6 +184,15 @@ export default function LiteraturePage() {
           <div className={styles.loadingState}>
             <div className={styles.loadingSpinner}></div>
             <p>Загрузка книг...</p>
+          </div>
+        ) : filteredBooks.length === 0 ? (
+          <div className={styles.emptyState}>
+            <i className="fas fa-book-open"></i>
+            <h3>Книги не найдены</h3>
+            <p>Измените фильтры или нажмите "Сбросить"</p>
+            <div style={{ marginTop: '20px', color: '#666', fontSize: '14px' }}>
+              <strong>Отладка:</strong> Загружено {books.length} книг, но фильтры скрыли все
+            </div>
           </div>
         ) : (
           <BookGrid 
