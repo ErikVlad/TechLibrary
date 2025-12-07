@@ -1,11 +1,10 @@
-// app/register/page.tsx
 'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { supabase } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client'; // ИМПОРТ ИЗМЕНЕН
 import { AuthError } from '@supabase/supabase-js';
 import styles from './auth.module.css';
 
@@ -39,13 +38,11 @@ export default function RegisterPage() {
     setSuccess('');
 
     try {
-      // Используем signUp из AuthProvider (просто передаем name как третий аргумент)
       const { data, error } = await signUp(email, password, name);
       
       if (error) {
         setError(error.message);
       } else if (data?.user) {
-        // После успешной регистрации выходим, чтобы пользователь не был автоматически залогинен
         await supabase.auth.signOut();
         
         setSuccess('Регистрация успешна! Проверьте вашу почту для подтверждения аккаунта.');
