@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import SidebarLayout from '@/components/main-block/sidebar/SidebarLayout';
 import FiltersSidebar from '@/components/books/FiltersSidebar/FiltersSidebar';
 import BookGrid from '@/components/books/BookGrid/BookGrid';
@@ -14,94 +14,45 @@ export default function LiteraturePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isFilterInitialized, setIsFilterInitialized] = useState(false);
   const booksPerPage = 12;
-  const [isInitialized, setIsInitialized] = useState(false);
+  
+  // Реф для отслеживания, была ли уже инициализация фильтров
+  const hasInitializedRef = useRef(false);
 
-  const loadBooks = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      console.log('Загрузка книг из Supabase...');
-      
-      const { data, error: supabaseError } = await supabase
-        .from('books')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (supabaseError) {
-        console.error('Ошибка Supabase:', supabaseError);
-        throw new Error(`Ошибка Supabase: ${supabaseError.message}`);
-      }
-
-      console.log('Данные получены из Supabase:', data);
-      
-      if (!data || data.length === 0) {
-        console.log('В базе данных нет книг');
-        setBooks([]);
-        setFilteredBooks([]);
-        setError('В базе данных пока нет книг. Добавьте книги через админ-панель Supabase.');
-      } else {
-        const booksData: Book[] = data.map(book => ({
-          id: book.id,
-          title: book.title,
-          author: book.author,
-          description: book.description || '',
-          year: book.year,
-          pages: book.pages,
-          pdf_url: book.pdf_url || '#',
-          category: book.category || 'Не указана',
-          tags: book.tags || [],
-          created_at: book.created_at,
-          updated_at: book.updated_at
-        }));
-        
-        console.log('Преобразованные книги:', booksData);
-        setBooks(booksData);
-        
-        // После загрузки книг инициализируем фильтры из URL
-        if (!isInitialized) {
-          setIsInitialized(true);
-          
-          // Берем фильтры из URL
-          const searchParams = new URLSearchParams(window.location.search);
-          const initialFilters: Filters = {
-            search: searchParams.get('search') || '',
-            categories: searchParams.get('categories')?.split(',').filter(Boolean) || [],
-            year: searchParams.get('year') || 'all',
-            tags: searchParams.get('tags')?.split(',').filter(Boolean) || [],
-            authors: searchParams.get('authors')?.split(',').filter(Boolean) || [],
-            yearFrom: searchParams.get('yearFrom') || '',
-            yearTo: searchParams.get('yearTo') || '',
-          };
-          
-          // Сразу применяем фильтры к загруженным книгам
-          handleFilterChange(initialFilters);
-        } else {
-          setFilteredBooks(booksData);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading books from Supabase:', error);
-      const err = error as Error;
-      setError(`Не удалось загрузить книги из базы данных: ${err.message}`);
-      setBooks([]);
-      setFilteredBooks([]);
-    } finally {
-      setLoading(false);
+  // Функция для получения фильтров из URL
+  const getFiltersFromURL = (): Filters => {
+    if (typeof window === 'undefined') {
+      return {
+        search: '',
+        categories: [],
+        year: 'all',
+        tags: [],
+        authors: [],
+        yearFrom: '',
+        yearTo: ''
+      };
     }
-  }, [isInitialized]);
+    
+    const searchParams = new URLSearchParams(window.location.search);
+    return {
+      search: searchParams.get('search') || '',
+      categories: searchParams.get('categories')?.split(',').filter(Boolean) || [],
+      year: searchParams.get('year') || 'all',
+      tags: searchParams.get('tags')?.split(',').filter(Boolean) || [],
+      authors: searchParams.get('authors')?.split(',').filter(Boolean) || [],
+      yearFrom: searchParams.get('yearFrom') || '',
+      yearTo: searchParams.get('yearTo') || '',
+    };
+  };
 
-  useEffect(() => {
-    loadBooks();
-  }, [loadBooks]);
-
-  const filterBooks = (booksList: Book[], filters: Filters): Book[] => {
+  // Функция фильтрации книг
+  const filterBooks = useCallback((booksList: Book[], filters: Filters): Book[] => {
+    if (!booksList || booksList.length === 0) return [];
+    
     let filtered = [...booksList];
 
-    if (!filters) return filtered;
-
-    // Поиск по названию и автору
+    // Поиск по названию, автору и описанию
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
       filtered = filtered.filter(book => 
@@ -157,6 +108,7 @@ export default function LiteraturePage() {
         filtered = filtered.filter(book => book.year && book.year >= yearFromNum);
       }
     }
+    
     if (filters.yearTo) {
       const yearToNum = parseInt(filters.yearTo);
       if (!isNaN(yearToNum)) {
@@ -165,12 +117,95 @@ export default function LiteraturePage() {
     }
 
     return filtered;
-  };
+  }, []);
 
+  const loadBooks = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Загрузка книг из Supabase...');
+      
+      const { data, error: supabaseError } = await supabase
+        .from('books')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (supabaseError) {
+        console.error('Ошибка Supabase:', supabaseError);
+        throw new Error(`Ошибка Supabase: ${supabaseError.message}`);
+      }
+
+      console.log('Данные получены из Supabase:', data);
+      
+      if (!data || data.length === 0) {
+        console.log('В базе данных нет книг');
+        setBooks([]);
+        setFilteredBooks([]);
+        setError('В базе данных пока нет книг. Добавьте книги через админ-панель Supabase.');
+      } else {
+        const booksData: Book[] = data.map(book => ({
+          id: book.id,
+          title: book.title,
+          author: book.author,
+          description: book.description || '',
+          year: book.year,
+          pages: book.pages,
+          pdf_url: book.pdf_url || '#',
+          category: book.category || 'Не указана',
+          tags: book.tags || [],
+          created_at: book.created_at,
+          updated_at: book.updated_at
+        }));
+        
+        console.log('Загружено книг:', booksData.length);
+        setBooks(booksData);
+        
+        // НЕМЕДЛЕННО применяем фильтры из URL
+        const urlFilters = getFiltersFromURL();
+        console.log('Фильтры из URL:', urlFilters);
+        
+        const filtered = filterBooks(booksData, urlFilters);
+        console.log('Отфильтровано книг:', filtered.length);
+        setFilteredBooks(filtered);
+        
+        // Помечаем, что фильтры инициализированы
+        if (!hasInitializedRef.current) {
+          hasInitializedRef.current = true;
+          setIsFilterInitialized(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading books from Supabase:', error);
+      const err = error as Error;
+      setError(`Не удалось загрузить книги из базы данных: ${err.message}`);
+      setBooks([]);
+      setFilteredBooks([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filterBooks]);
+
+  // Загружаем книги при монтировании
+  useEffect(() => {
+    loadBooks();
+  }, [loadBooks]);
+
+  // Также слушаем изменения URL для обновления фильтров
+  useEffect(() => {
+    if (books.length > 0) {
+      const urlFilters = getFiltersFromURL();
+      const filtered = filterBooks(books, urlFilters);
+      setFilteredBooks(filtered);
+      setCurrentPage(1);
+    }
+  }, [books, filterBooks, isFilterInitialized]);
+
+  // Обработчик изменения фильтров от компонента FiltersSidebar
   const handleFilterChange = (filters: Filters) => {
     const filtered = filterBooks(books, filters);
     setFilteredBooks(filtered);
-    setCurrentPage(1); // Сбрасываем на первую страницу
+    setCurrentPage(1);
   };
 
   const handleBookSelect = (book: Book) => {
