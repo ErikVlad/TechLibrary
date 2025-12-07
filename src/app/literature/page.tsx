@@ -15,6 +15,7 @@ export default function LiteraturePage() {
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const booksPerPage = 12;
+  const [isInitialized, setIsInitialized] = useState(false);
 
   const loadBooks = useCallback(async () => {
     try {
@@ -23,7 +24,6 @@ export default function LiteraturePage() {
       
       console.log('Загрузка книг из Supabase...');
       
-      // ТОЛЬКО загрузка из Supabase
       const { data, error: supabaseError } = await supabase
         .from('books')
         .select('*')
@@ -42,7 +42,6 @@ export default function LiteraturePage() {
         setFilteredBooks([]);
         setError('В базе данных пока нет книг. Добавьте книги через админ-панель Supabase.');
       } else {
-        // Преобразуем данные к типу Book
         const booksData: Book[] = data.map(book => ({
           id: book.id,
           title: book.title,
@@ -59,7 +58,28 @@ export default function LiteraturePage() {
         
         console.log('Преобразованные книги:', booksData);
         setBooks(booksData);
-        setFilteredBooks(booksData);
+        
+        // После загрузки книг инициализируем фильтры из URL
+        if (!isInitialized) {
+          setIsInitialized(true);
+          
+          // Берем фильтры из URL
+          const searchParams = new URLSearchParams(window.location.search);
+          const initialFilters: Filters = {
+            search: searchParams.get('search') || '',
+            categories: searchParams.get('categories')?.split(',').filter(Boolean) || [],
+            year: searchParams.get('year') || 'all',
+            tags: searchParams.get('tags')?.split(',').filter(Boolean) || [],
+            authors: searchParams.get('authors')?.split(',').filter(Boolean) || [],
+            yearFrom: searchParams.get('yearFrom') || '',
+            yearTo: searchParams.get('yearTo') || '',
+          };
+          
+          // Сразу применяем фильтры к загруженным книгам
+          handleFilterChange(initialFilters);
+        } else {
+          setFilteredBooks(booksData);
+        }
       }
     } catch (error) {
       console.error('Error loading books from Supabase:', error);
@@ -70,48 +90,50 @@ export default function LiteraturePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isInitialized]);
 
   useEffect(() => {
     loadBooks();
   }, [loadBooks]);
 
-  const handleFilterChange = (filters: Filters) => {
-    let filtered = [...books];
+  const filterBooks = (booksList: Book[], filters: Filters): Book[] => {
+    let filtered = [...booksList];
+
+    if (!filters) return filtered;
 
     // Поиск по названию и автору
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
       filtered = filtered.filter(book => 
-        book.title.toLowerCase().includes(searchLower) ||
-        book.author.toLowerCase().includes(searchLower) ||
-        book.description.toLowerCase().includes(searchLower)
+        (book.title && book.title.toLowerCase().includes(searchLower)) ||
+        (book.author && book.author.toLowerCase().includes(searchLower)) ||
+        (book.description && book.description.toLowerCase().includes(searchLower))
       );
     }
 
     // Фильтр по категориям
-    if (filters.categories.length > 0) {
+    if (filters.categories && filters.categories.length > 0) {
       filtered = filtered.filter(book => 
-        filters.categories.includes(book.category)
+        book.category && filters.categories.includes(book.category)
       );
     }
 
-    // Фильтр по авторам (НОВЫЙ ФИЛЬТР вместо языка)
-    if (filters.authors.length > 0) {
+    // Фильтр по авторам
+    if (filters.authors && filters.authors.length > 0) {
       filtered = filtered.filter(book => 
-        filters.authors.includes(book.author)
+        book.author && filters.authors.includes(book.author)
       );
     }
 
     // Фильтр по тегам
-    if (filters.tags.length > 0) {
+    if (filters.tags && filters.tags.length > 0) {
       filtered = filtered.filter(book => 
-        book.tags.some(tag => filters.tags.includes(tag))
+        book.tags && book.tags.some(tag => filters.tags.includes(tag))
       );
     }
 
     // Фильтр по году
-    if (filters.year !== 'all') {
+    if (filters.year && filters.year !== 'all') {
       switch (filters.year) {
         case '2025':
           filtered = filtered.filter(book => book.year === 2025);
@@ -132,22 +154,26 @@ export default function LiteraturePage() {
     if (filters.yearFrom) {
       const yearFromNum = parseInt(filters.yearFrom);
       if (!isNaN(yearFromNum)) {
-        filtered = filtered.filter(book => book.year >= yearFromNum);
+        filtered = filtered.filter(book => book.year && book.year >= yearFromNum);
       }
     }
     if (filters.yearTo) {
       const yearToNum = parseInt(filters.yearTo);
       if (!isNaN(yearToNum)) {
-        filtered = filtered.filter(book => book.year <= yearToNum);
+        filtered = filtered.filter(book => book.year && book.year <= yearToNum);
       }
     }
 
+    return filtered;
+  };
+
+  const handleFilterChange = (filters: Filters) => {
+    const filtered = filterBooks(books, filters);
     setFilteredBooks(filtered);
-    setCurrentPage(1);
+    setCurrentPage(1); // Сбрасываем на первую страницу
   };
 
   const handleBookSelect = (book: Book) => {
-    // Открываем PDF в новой вкладке
     if (book.pdf_url && book.pdf_url !== '#') {
       window.open(book.pdf_url, '_blank');
     } else {
@@ -160,6 +186,13 @@ export default function LiteraturePage() {
   const startIndex = (currentPage - 1) * booksPerPage;
   const endIndex = startIndex + booksPerPage;
   const currentBooks = filteredBooks.slice(startIndex, endIndex);
+
+  // Сброс страницы если она выходит за пределы
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(1);
+    }
+  }, [filteredBooks, currentPage, totalPages]);
 
   return (
     <SidebarLayout
