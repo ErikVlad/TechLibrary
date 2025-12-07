@@ -5,7 +5,7 @@ import SidebarLayout from '@/components/main-block/sidebar/SidebarLayout';
 import FiltersSidebar from '@/components/books/FiltersSidebar/FiltersSidebar';
 import BookGrid from '@/components/books/BookGrid/BookGrid';
 import { Book, Filters } from '@/lib/types';
-import { supabase } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client'; // ИМПОРТ ИЗМЕНЕН
 import { useAuth } from '@/components/providers/AuthProvider';
 import styles from './page.module.css';
 
@@ -20,16 +20,12 @@ export default function HomePage() {
 
   const isMounted = useRef<boolean>(true);
   const prevUserRef = useRef<string | null>(null);
-  const authListenerSetRef = useRef<boolean>(false);
 
-  // Функция для загрузки книг с правильной логикой авторизации
-  const loadBooks = useCallback(async (userId: string | null = null) => {
+  const loadBooks = useCallback(async (forceReload: boolean = false) => {
     if (!isMounted.current) return;
     
-    const currentUserId = userId || (user?.id || 'anon');
-    
-    // Если пользователь не изменился, не загружаем заново
-    if (prevUserRef.current === currentUserId && books.length > 0) {
+    const currentUserId = user?.id || 'anon';
+    if (!forceReload && prevUserRef.current === currentUserId && books.length > 0) {
       console.log('User unchanged, skipping book reload');
       return;
     }
@@ -43,12 +39,6 @@ export default function HomePage() {
         .select('*')
         .order('created_at', { ascending: false });
       
-      // Добавьте здесь логику для разных типов пользователей
-      // Например, для анонимных пользователей только публичные книги
-      // if (!user) {
-      //   query = query.eq('is_public', true);
-      // }
-      
       const { data, error } = await query;
       
       if (error) throw error;
@@ -56,12 +46,11 @@ export default function HomePage() {
       if (isMounted.current) {
         if (data && data.length > 0) {
           setBooks(data);
-          setFilteredBooks(data); // Сброс фильтров при загрузке новых книг
-          setCurrentPage(1); // Сброс пагинации
+          setFilteredBooks(data);
+          setCurrentPage(1);
           prevUserRef.current = currentUserId;
           console.log(`Loaded ${data.length} books`);
         } else {
-          // Демо-данные
           const demoBooks: Book[] = [
             {
               id: '1',
@@ -104,9 +93,8 @@ export default function HomePage() {
         console.log('Books loading finished');
       }
     }
-  }, [user]);
+  }, [user, books.length]);
 
-  // Инициализация
   useEffect(() => {
     isMounted.current = true;
     console.log('HomePage mounted');
@@ -116,70 +104,40 @@ export default function HomePage() {
     };
   }, []);
 
-  // Основная загрузка книг при монтировании
   useEffect(() => {
     if (!authLoading && isMounted.current) {
       console.log('Auth ready, loading books...');
-      loadBooks();
+      loadBooks(true);
     }
   }, [authLoading, loadBooks]);
 
-  // Прямой слушатель событий авторизации (упрощенный)
   useEffect(() => {
-    if (authListenerSetRef.current) return;
-    
-    console.log('Setting up auth listener');
-    
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log(`Auth event: ${event}`);
         
         if (!isMounted.current) return;
         
-        // При входе/выходе обновляем книги
         if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
           console.log(`Auth changed: ${event}, loading books...`);
           
-          // Сбрасываем предыдущего пользователя
           prevUserRef.current = null;
           
-          // Загружаем книги с небольшой задержкой
           setTimeout(() => {
             if (isMounted.current) {
               const userId = session?.user?.id || null;
-              loadBooks(userId);
+              loadBooks();
             }
           }, 100);
         }
       }
     );
     
-    authListenerSetRef.current = true;
-    
     return () => {
       subscription.unsubscribe();
-      authListenerSetRef.current = false;
     };
   }, [loadBooks]);
 
-  // При изменении пользователя сбрасываем состояние
-  useEffect(() => {
-    if (!authLoading) {
-      const currentUserId = user?.id || 'anon';
-      
-      if (prevUserRef.current !== currentUserId) {
-        console.log(`User changed from ${prevUserRef.current} to ${currentUserId}`);
-        
-        // Сбрасываем фильтры при смене пользователя
-        setFilteredBooks(books);
-        setCurrentPage(1);
-        
-        // Не загружаем книги снова, они уже загружены в loadBooks
-      }
-    }
-  }, [user, authLoading, books]);
-
-  // Функция фильтрации
   const applyFilters = useCallback((filters: Filters): void => {
     let filtered = [...books];
 
@@ -245,7 +203,6 @@ export default function HomePage() {
     setCurrentPage(1);
   }, [books]);
 
-  // Дебаунс для фильтрации
   const useDebounce = (callback: (filters: Filters) => void, delay: number) => {
     return useCallback((filters: Filters) => {
       const timeoutId = setTimeout(() => {
@@ -273,13 +230,11 @@ export default function HomePage() {
     setCurrentPage(1);
   };
 
-  // Пагинация
   const totalPages = Math.ceil(filteredBooks.length / booksPerPage);
   const startIndex = (currentPage - 1) * booksPerPage;
   const endIndex = startIndex + booksPerPage;
   const currentBooks = filteredBooks.slice(startIndex, endIndex);
 
-  // Если грузится авторизация
   if (authLoading) {
     return (
       <div className={styles.loadingState}>
