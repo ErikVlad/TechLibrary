@@ -1,69 +1,122 @@
-// app/literature/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
-// Временно используем SimpleLayout
-import SimpleLayout from '@/components/main-block/sidebar/SimpleLayout';
-import { Book } from '@/lib/types';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import SidebarLayout from '@/components/main-block/sidebar/SidebarLayout';
+import FiltersSidebar from '@/components/books/FiltersSidebar/FiltersSidebar';
+import BookGrid from '@/components/books/BookGrid/BookGrid';
+import { Book, Filters } from '@/lib/types';
 import { supabase } from '@/lib/supabase/client';
+import { useAuth } from '@/components/providers/AuthProvider'; // Восстанавливаем
+import styles from './page.module.css';
 
 export default function LiteraturePage() {
   console.log('🚀 LiteraturePage: Начало рендера');
+  const { user } = useAuth(); // Используем
   
   const [books, setBooks] = useState<Book[]>([]);
+  const [filteredBooks, setFilteredBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Рефы для контроля
+  const hasLoadedBooks = useRef(false);
+  const lastUserId = useRef<string | null>(null);
 
+  // Загрузка книг - зависит от пользователя
   useEffect(() => {
-    console.log('📚 LiteraturePage: Загрузка началась');
-    
-    let mounted = true;
-    
     const loadBooks = async () => {
+      // Если книги уже загружены для этого пользователя - пропускаем
+      if (hasLoadedBooks.current && user?.id === lastUserId.current) {
+        console.log('📚 Книги уже загружены для этого пользователя');
+        setLoading(false);
+        return;
+      }
+      
+      console.log('📚 Загрузка книг для пользователя:', user?.email || 'не авторизован');
+      
       try {
-        console.log('🔍 LiteraturePage: Запрос к Supabase');
         const { data } = await supabase
           .from('books')
           .select('*')
           .order('created_at', { ascending: false });
 
-        console.log('✅ LiteraturePage: Получено книг:', data?.length || 0);
-        
-        if (mounted) {
-          if (data && data.length > 0) {
-            const booksData: Book[] = data.map(book => ({
-              id: book.id,
-              title: book.title,
-              author: book.author,
-              description: book.description || '',
-              year: book.year,
-              pages: book.pages,
-              pdf_url: book.pdf_url || '#',
-              category: book.category || 'Не указана',
-              tags: book.tags || [],
-              created_at: book.created_at,
-              updated_at: book.updated_at
-            }));
-            
-            console.log('💾 LiteraturePage: Устанавливаю книги');
-            setBooks(booksData);
-          }
-          setLoading(false);
+        if (data && data.length > 0) {
+          const booksData: Book[] = data.map(book => ({
+            id: book.id,
+            title: book.title,
+            author: book.author,
+            description: book.description || '',
+            year: book.year,
+            pages: book.pages,
+            pdf_url: book.pdf_url || '#',
+            category: book.category || 'Не указана',
+            tags: book.tags || [],
+            created_at: book.created_at,
+            updated_at: book.updated_at
+          }));
+          
+          console.log('✅ Загружено книг:', booksData.length);
+          setBooks(booksData);
+          setFilteredBooks(booksData);
+          hasLoadedBooks.current = true;
+          lastUserId.current = user?.id || null;
         }
       } catch (error) {
-        console.error('❌ LiteraturePage: Ошибка:', error);
-        if (mounted) {
-          setLoading(false);
-        }
+        console.error('❌ Ошибка загрузки:', error);
+      } finally {
+        setLoading(false);
       }
     };
 
     loadBooks();
+  }, [user?.id]); // Загружаем при изменении ID пользователя
+
+  // Функция фильтрации
+  const filterBooks = useCallback((booksList: Book[], filters: Filters): Book[] => {
+    if (!booksList || booksList.length === 0) return [];
     
-    return () => {
-      console.log('🧹 LiteraturePage: Очистка');
-      mounted = false;
-    };
+    let filtered = [...booksList];
+
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      filtered = filtered.filter(book => 
+        (book.title?.toLowerCase().includes(searchLower)) ||
+        (book.author?.toLowerCase().includes(searchLower))
+      );
+    }
+
+    if (filters.categories?.length > 0) {
+      filtered = filtered.filter(book => 
+        book.category && filters.categories.includes(book.category)
+      );
+    }
+
+    if (filters.year && filters.year !== 'all') {
+      switch (filters.year) {
+        case '2025':
+          filtered = filtered.filter(book => book.year === 2025);
+          break;
+        case '2024':
+          filtered = filtered.filter(book => book.year === 2024);
+          break;
+        case '2023-2021':
+          filtered = filtered.filter(book => book.year >= 2021 && book.year <= 2023);
+          break;
+        case 'old':
+          filtered = filtered.filter(book => book.year < 2021);
+          break;
+      }
+    }
+
+    return filtered;
   }, []);
+
+  // Обработчик фильтров
+  const handleFilterChange = useCallback((filters: Filters) => {
+    console.log('🔧 Получены фильтры:', filters);
+    
+    const filtered = filterBooks(books, filters);
+    setFilteredBooks(filtered);
+  }, [books, filterBooks]);
 
   const handleBookSelect = (book: Book) => {
     if (book.pdf_url && book.pdf_url !== '#') {
@@ -71,66 +124,43 @@ export default function LiteraturePage() {
     }
   };
 
-  console.log('🔄 LiteraturePage: Конец рендера', {
+  console.log('📊 LiteraturePage: Статус', {
     loading,
-    booksCount: books.length
+    booksCount: books.length,
+    filteredCount: filteredBooks.length,
+    user: user?.email || 'нет'
   });
 
   return (
-    <SimpleLayout
+    <SidebarLayout
       filters={
-        <div style={{ padding: '10px', backgroundColor: '#e8f4f8' }}>
-          <h3>Фильтры (упрощенные)</h3>
-          <p>Книг доступно: {books.length}</p>
-        </div>
+        <FiltersSidebar
+          books={books}
+          onFilterChange={handleFilterChange}
+        />
       }
     >
-      <div style={{ padding: '20px' }}>
-        <h1>Каталог технической литературы</h1>
-        <p>Книг в базе: <strong>{books.length}</strong></p>
+      <div className={styles.booksSection}>
+        <div className={styles.booksHeader}>
+          <h1>Каталог технической литературы</h1>
+          <p className={styles.booksCount}>
+            Показано: <span>{filteredBooks.length}</span> из <span>{books.length}</span> книг
+            {user && <span style={{ marginLeft: '10px', color: '#666' }}>({user.email})</span>}
+          </p>
+        </div>
 
         {loading ? (
-          <div>Загрузка книг...</div>
-        ) : books.length === 0 ? (
-          <div>Нет книг в базе</div>
-        ) : (
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
-            gap: '20px',
-            marginTop: '20px'
-          }}>
-            {books.map(book => (
-              <div 
-                key={book.id}
-                style={{
-                  padding: '15px',
-                  backgroundColor: 'white',
-                  borderRadius: '8px',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                }}
-              >
-                <h3 style={{ marginTop: 0 }}>{book.title}</h3>
-                <p><strong>Автор:</strong> {book.author}</p>
-                <p><strong>Год:</strong> {book.year}</p>
-                <button 
-                  onClick={() => handleBookSelect(book)}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: '#0070f3',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Читать
-                </button>
-              </div>
-            ))}
+          <div className={styles.loadingState}>
+            <div className={styles.loadingSpinner}></div>
+            <p>Загрузка книг...</p>
           </div>
+        ) : (
+          <BookGrid 
+            books={filteredBooks} 
+            onBookSelect={handleBookSelect}
+          />
         )}
       </div>
-    </SimpleLayout>
+    </SidebarLayout>
   );
 }
