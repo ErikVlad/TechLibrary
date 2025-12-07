@@ -9,15 +9,15 @@ import Link from 'next/link';
 
 interface BookCardProps {
   book: Book;
+  onRead: (book: Book) => void; // Добавляем пропс
 }
 
-export default function BookCard({ book }: BookCardProps) {
+export default function BookCard({ book, onRead }: BookCardProps) {
   const { user } = useAuth();
   const [isFavorite, setIsFavorite] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [favoriteId, setFavoriteId] = useState<string | null>(null);
 
-  // Проверяем, добавлена ли книга в избранное при загрузке
   const checkIfFavorite = useCallback(async () => {
     if (!user || !book.id) return;
     
@@ -52,7 +52,6 @@ export default function BookCard({ book }: BookCardProps) {
     }
   }, [user, book.id, checkIfFavorite]);
 
-  // Добавление/удаление из избранного
   const handleFavoriteClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     
@@ -65,7 +64,6 @@ export default function BookCard({ book }: BookCardProps) {
     
     try {
       if (isFavorite && favoriteId) {
-        // Удаляем из избранного
         const { error } = await supabase
           .from('favorites')
           .delete()
@@ -75,9 +73,7 @@ export default function BookCard({ book }: BookCardProps) {
         
         setIsFavorite(false);
         setFavoriteId(null);
-        console.log('Книга удалена из избранного');
       } else {
-        // Добавляем в избранное
         const { data, error } = await supabase
           .from('favorites')
           .insert({
@@ -95,16 +91,14 @@ export default function BookCard({ book }: BookCardProps) {
           .single();
         
         if (error) {
-          // Если книга уже в избранном
           if (error.code === '23505') {
-            await checkIfFavorite(); // Обновляем статус
+            await checkIfFavorite();
           } else {
             throw error;
           }
         } else if (data) {
           setIsFavorite(true);
           setFavoriteId(data.id);
-          console.log('Книга добавлена в избранное');
         }
       }
     } catch (error) {
@@ -122,7 +116,11 @@ export default function BookCard({ book }: BookCardProps) {
     console.log('Book info:', book);
   };
 
-  // Если у книги нет ID, не показываем кнопку избранного
+  const handleReadClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onRead(book);
+  };
+
   const canAddToFavorites = user && book.id;
 
   return (
@@ -147,20 +145,19 @@ export default function BookCard({ book }: BookCardProps) {
         </div>
         
         <p className={styles.bookDescription}>
-          {book.description.length > 120 
+          {book.description && book.description.length > 120 
             ? `${book.description.substring(0, 120)}...` 
             : book.description}
         </p>
         
         <div className={styles.bookActions}>
-          {/* ИСПРАВЛЕНО: Link вместо button с onClick */}
-          <Link 
-            href={`/literature/${book.id}`}
+          <button 
+            onClick={handleReadClick}
             className={styles.btnPrimary}
             title="Читать книгу"
           >
             <i className="fas fa-book-open"></i> Читать
-          </Link>
+          </button>
           
           <button 
             className={styles.btnOutline} 
