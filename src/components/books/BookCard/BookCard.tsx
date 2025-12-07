@@ -12,7 +12,8 @@ interface BookCardProps {
 }
 
 export default function BookCard({ book, onRead }: BookCardProps) {
-  const { user } = useAuth();
+  //const { user } = useAuth();
+  const user = null;
   const [isFavorite, setIsFavorite] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [favoriteId, setFavoriteId] = useState<string | null>(null);
