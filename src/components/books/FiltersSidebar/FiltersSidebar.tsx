@@ -29,13 +29,10 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
   const [yearTo, setYearTo] = useState(searchParams.get('yearTo') || '');
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
 
-  // Функция для форматирования категории с заглавной буквы
   const formatCategory = (category: string): string => {
     if (!category) return '';
-    
     const trimmed = category.trim();
     if (!trimmed) return '';
-    
     return trimmed
       .toLowerCase()
       .split(/[\s-/]+/)
@@ -46,7 +43,6 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
       .join(' ');
   };
 
-  // Получаем и форматируем категории
   const categories = Array.from(
     new Set(
       books
@@ -59,7 +55,6 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
   const tags = Array.from(new Set(books.flatMap(book => book.tags || []))).slice(0, 10);
   const authors = Array.from(new Set(books.map(book => book.author).filter(Boolean)));
 
-  // Применяем фильтры
   const applyFilters = useCallback(() => {
     const filters: Filters = {
       search,
@@ -71,9 +66,7 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
       yearTo
     };
     
-    // Обновляем URL
     const params = new URLSearchParams();
-    
     if (search) params.set('search', search);
     if (selectedCategories.length > 0) params.set('categories', selectedCategories.join(','));
     if (selectedYear !== 'all') params.set('year', selectedYear);
@@ -85,14 +78,12 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
     const newUrl = `${window.location.pathname}?${params.toString()}`;
     router.replace(newUrl, { scroll: false });
     
-    // Передаем фильтры родительскому компоненту
     onFilterChange(filters);
   }, [search, selectedCategories, selectedYear, selectedTags, selectedAuthors, yearFrom, yearTo, router, onFilterChange]);
 
-  // Применяем фильтры при изменении любого параметра
   useEffect(() => {
     applyFilters();
-  }, [search, selectedCategories, selectedYear, selectedTags, selectedAuthors, yearFrom, yearTo, applyFilters]);
+  }, [applyFilters]);
 
   const clearFilters = () => {
     setSearch('');
