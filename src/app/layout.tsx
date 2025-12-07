@@ -1,9 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
-// Временно отключаем AuthProvider для отладки
-// import { AuthProvider } from '@/components/providers/AuthProvider';
-import Header from '@/components/main-block/header/Header';
+import HeaderNoAuth from '@/components/main-block/header/HeaderNoAuth'; // Используем заглушку
 import Footer from '@/components/main-block/footer/Footer';
 import '../styles/globals.css';
 
@@ -31,12 +29,10 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <ThemeProvider>
-          {/* Временно отключаем AuthProvider для отладки */}
-          {/* <AuthProvider> */}
-            <Header />
-            <main>{children}</main>
-            <Footer />
-          {/* </AuthProvider> */}
+          {/* Временно отключен весь Auth */}
+          <HeaderNoAuth />
+          <main>{children}</main>
+          <Footer />
         </ThemeProvider>
       </body>
     </html>
