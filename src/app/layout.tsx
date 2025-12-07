@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
-import { AuthProvider } from '@/components/providers/AuthProvider';
+// Временно отключаем AuthProvider для отладки
+// import { AuthProvider } from '@/components/providers/AuthProvider';
 import Header from '@/components/main-block/header/Header';
 import Footer from '@/components/main-block/footer/Footer';
 import '../styles/globals.css';
@@ -30,11 +31,12 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <ThemeProvider>
-          <AuthProvider>
+          {/* Временно отключаем AuthProvider для отладки */}
+          {/* <AuthProvider> */}
             <Header />
             <main>{children}</main>
             <Footer />
-          </AuthProvider>
+          {/* </AuthProvider> */}
         </ThemeProvider>
       </body>
     </html>
