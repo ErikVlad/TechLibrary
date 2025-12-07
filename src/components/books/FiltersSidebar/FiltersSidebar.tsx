@@ -30,6 +30,12 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
   const [isInitialized, setIsInitialized] = useState(false);
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
 
+  // Функция для форматирования категории с заглавной буквы
+  const formatCategory = (category: string): string => {
+    if (!category) return '';
+    return category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
+  };
+
   const categories = Array.from(new Set(books.map(book => book.category).filter(Boolean)));
   const tags = Array.from(new Set(books.flatMap(book => book.tags || []))).slice(0, 10);
   const authors = Array.from(new Set(books.map(book => book.author).filter(Boolean)));
@@ -158,7 +164,7 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
                   checked={selectedCategories.includes(category)}
                   onChange={() => handleCategoryToggle(category)}
                 />
-                <label htmlFor={`cat-${category}`}>{category}</label>
+                <label htmlFor={`cat-${category}`}>{formatCategory(category)}</label>
               </div>
             ))}
           </div>
