@@ -33,10 +33,35 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
   // Функция для форматирования категории с заглавной буквы
   const formatCategory = (category: string): string => {
     if (!category) return '';
-    return category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
+    
+    // Убираем лишние пробелы
+    const trimmed = category.trim();
+    
+    // Если строка пустая после обрезки
+    if (!trimmed) return '';
+    
+    // Форматируем: первая буква заглавная, остальные строчные
+    // Для составных слов (через пробел, дефис, слэш)
+    return trimmed
+      .toLowerCase()
+      .split(/[\s-/]+/)
+      .map(word => {
+        if (!word) return '';
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      })
+      .join(' ');
   };
 
-  const categories = Array.from(new Set(books.map(book => book.category).filter(Boolean)));
+  // Получаем и форматируем категории
+  const categories = Array.from(
+    new Set(
+      books
+        .map(book => book.category)
+        .filter(Boolean)
+        .map(cat => formatCategory(cat))
+    )
+  ).sort(); // Сортируем по алфавиту
+
   const tags = Array.from(new Set(books.flatMap(book => book.tags || []))).slice(0, 10);
   const authors = Array.from(new Set(books.map(book => book.author).filter(Boolean)));
 
@@ -164,7 +189,7 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
                   checked={selectedCategories.includes(category)}
                   onChange={() => handleCategoryToggle(category)}
                 />
-                <label htmlFor={`cat-${category}`}>{formatCategory(category)}</label>
+                <label htmlFor={`cat-${category}`}>{category}</label>
               </div>
             ))}
           </div>
