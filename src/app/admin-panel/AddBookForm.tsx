@@ -1,4 +1,3 @@
-// app/admin-panel/AddBookForm.tsx
 'use client';
 
 import { useState } from 'react';

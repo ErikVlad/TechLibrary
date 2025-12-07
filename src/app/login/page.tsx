@@ -107,7 +107,7 @@ export default function LoginPage() {
         </div>
         
         <div className={styles.demoNote}>
-          <p><strong>Демо-аккаунт:</strong> test@example.com / password123</p>
+          <p><strong>Тестовый аккаунт:</strong>email: 2@2 / password: 123456</p>
         </div>
       </div>
     </div>

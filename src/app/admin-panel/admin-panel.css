@@ -901,7 +901,6 @@
   animation: progress 1.5s ease-in-out infinite;
 }
 
-/* Спиннер загрузки */
 .spinner {
   display: inline-block;
   width: 16px;
@@ -913,7 +912,6 @@
   margin-right: 8px;
 }
 
-/* Кнопка очистки файла */
 .clear-file-btn {
   background: none;
   border: none;
@@ -930,7 +928,6 @@
   background-color: rgba(220, 53, 69, 0.1);
 }
 
-/* Кнопки формы */
 .form-actions {
   display: flex;
   gap: 12px;
@@ -982,7 +979,6 @@
   cursor: not-allowed;
 }
 
-/* Текст помощи */
 .helper-text {
   font-size: 12px;
   color: #6c757d;

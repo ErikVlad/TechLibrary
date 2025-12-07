@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Book, Filters } from '@/lib/types';
+import { useSearchParams, useRouter } from 'next/navigation';
 import styles from './FiltersSidebar.module.css';
 
 interface FiltersSidebarProps {
@@ -10,23 +11,85 @@ interface FiltersSidebarProps {
 }
 
 export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebarProps) {
-  const [search, setSearch] = useState('');
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [selectedYear, setSelectedYear] = useState<string>('all');
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
-  const [yearFrom, setYearFrom] = useState('');
-  const [yearTo, setYearTo] = useState('');
+  const searchParams = useSearchParams();
+  const router = useRouter();
   
+  // Инициализируем состояние из URL параметров
+  const [search, setSearch] = useState(searchParams.get('search') || '');
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(
+    searchParams.get('categories')?.split(',') || []
+  );
+  const [selectedYear, setSelectedYear] = useState<string>(searchParams.get('year') || 'all');
+  const [selectedTags, setSelectedTags] = useState<string[]>(
+    searchParams.get('tags')?.split(',') || []
+  );
+  const [selectedAuthors, setSelectedAuthors] = useState<string[]>(
+    searchParams.get('authors')?.split(',') || []
+  );
+  const [yearFrom, setYearFrom] = useState(searchParams.get('yearFrom') || '');
+  const [yearTo, setYearTo] = useState(searchParams.get('yearTo') || '');
+  const [isInitialized, setIsInitialized] = useState(false);
+
   // Получаем уникальные значения из книг
   const categories = Array.from(new Set(books.map(book => book.category)));
   const tags = Array.from(new Set(books.flatMap(book => book.tags))).slice(0, 10);
   const authors = Array.from(new Set(books.map(book => book.author)));
 
-  // Автоматически применяем фильтры при их изменении
+  // Функция для применения фильтров с обновлением URL
+  const applyFilters = useCallback(() => {
+    const filters: Filters = {
+      search,
+      categories: selectedCategories,
+      year: selectedYear,
+      tags: selectedTags,
+      authors: selectedAuthors,
+      yearFrom,
+      yearTo
+    };
+    
+    // Обновляем URL параметры
+    const params = new URLSearchParams();
+    
+    if (search) params.set('search', search);
+    if (selectedCategories.length > 0) params.set('categories', selectedCategories.join(','));
+    if (selectedYear !== 'all') params.set('year', selectedYear);
+    if (selectedTags.length > 0) params.set('tags', selectedTags.join(','));
+    if (selectedAuthors.length > 0) params.set('authors', selectedAuthors.join(','));
+    if (yearFrom) params.set('yearFrom', yearFrom);
+    if (yearTo) params.set('yearTo', yearTo);
+    
+    // Обновляем URL без перезагрузки страницы
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    router.replace(newUrl, { scroll: false });
+    
+    // Передаем фильтры родительскому компоненту
+    onFilterChange(filters);
+  }, [search, selectedCategories, selectedYear, selectedTags, selectedAuthors, yearFrom, yearTo, router, onFilterChange]);
+
+  // Применяем фильтры при изменении состояния
   useEffect(() => {
-    applyFilters();
+    if (isInitialized) {
+      applyFilters();
+    } else {
+      setIsInitialized(true);
+      // При первой загрузке сразу применяем фильтры из URL
+      applyFilters();
+    }
   }, [search, selectedCategories, selectedYear, selectedTags, selectedAuthors, yearFrom, yearTo]);
+
+  // Очистка фильтров
+  const clearFilters = () => {
+    setSearch('');
+    setSelectedCategories([]);
+    setSelectedYear('all');
+    setSelectedTags([]);
+    setSelectedAuthors([]);
+    setYearFrom('');
+    setYearTo('');
+    
+    // Очищаем URL
+    router.replace(window.location.pathname, { scroll: false });
+  };
 
   const handleCategoryToggle = (category: string) => {
     setSelectedCategories(prev => 
@@ -52,33 +115,29 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
     );
   };
 
-  const clearFilters = () => {
-    setSearch('');
-    setSelectedCategories([]);
-    setSelectedYear('all');
-    setSelectedTags([]);
-    setSelectedAuthors([]);
-    setYearFrom('');
-    setYearTo('');
-  };
-
-  const applyFilters = () => {
-    const filters: Filters = {
-      search,
-      categories: selectedCategories,
-      year: selectedYear,
-      tags: selectedTags,
-      authors: selectedAuthors,
-      yearFrom,
-      yearTo
-    };
-    onFilterChange(filters);
-  };
-
   // Дебаунс для поиска
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearch(e.target.value);
+    const value = e.target.value;
+    setSearch(value);
+    
+    // Отменяем предыдущий таймаут
+    if (searchTimeout) clearTimeout(searchTimeout);
+    
+    // Устанавливаем новый таймаут для дебаунса
+    setSearchTimeout(
+      setTimeout(() => {
+        setSearch(value);
+      }, 300)
+    );
   };
+
+  // Очищаем таймаут при размонтировании
+  useEffect(() => {
+    return () => {
+      if (searchTimeout) clearTimeout(searchTimeout);
+    };
+  }, [searchTimeout]);
 
   return (
     <div className={styles.filtersSidebar}>
