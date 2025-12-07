@@ -1,7 +1,7 @@
 // components/providers/AuthProvider.tsx
 'use client';
 
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { User, Session, AuthError } from '@supabase/supabase-js';
@@ -29,13 +29,14 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const pathname = usePathname(); // Добавляем pathname
+  const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // Флаг для отслеживания инициализации
-  const [isInitialized, setIsInitialized] = useState(false);
+  // Используем ref вместо state для отслеживания инициализации
+  const isInitializedRef = useRef(false);
+  const skipNextAuthEventRef = useRef(false);
 
   // Функция для создания профиля если его нет
   const createProfileIfNotExists = useCallback(async (user: User) => {
@@ -69,48 +70,80 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     console.log('🔄 AuthProvider: Инициализация началась');
     
-    // Проверяем активную сессию
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      console.log('🔐 AuthProvider: Получена сессия', session ? 'есть' : 'нет');
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        console.log('👤 AuthProvider: Создаю профиль для пользователя');
-        await createProfileIfNotExists(session.user);
+    // Если уже инициализированы, выходим
+    if (isInitializedRef.current) {
+      console.log('🔄 AuthProvider: Уже инициализирован, пропускаю');
+      return;
+    }
+    
+    const initializeAuth = async () => {
+      try {
+        // Получаем текущую сессию
+        const { data: { session } } = await supabase.auth.getSession();
+        console.log('🔐 AuthProvider: Получена начальная сессия', session ? 'есть' : 'нет');
+        
+        // Устанавливаем состояние один раз
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          console.log('👤 AuthProvider: Создаю профиль для начального пользователя');
+          await createProfileIfNotExists(session.user);
+        }
+        
+        // Помечаем как инициализированное
+        isInitializedRef.current = true;
+        
+        // Пропускаем следующее событие INITIAL_SESSION
+        skipNextAuthEventRef.current = true;
+        
+      } catch (error) {
+        console.error('❌ AuthProvider: Ошибка инициализации:', error);
+      } finally {
+        setLoading(false);
+        console.log('✅ AuthProvider: Инициализация завершена');
       }
-      
-      setLoading(false);
-      setIsInitialized(true);
-      console.log('✅ AuthProvider: Инициализация завершена');
-    }).catch(error => {
-      console.error('❌ AuthProvider: Ошибка получения сессии:', error);
-      setLoading(false);
-      setIsInitialized(true);
-    });
+    };
 
-    // Слушаем изменения аутентификации
+    initializeAuth();
+
+    // Подписываемся на изменения состояния аутентификации
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('🎯 AuthProvider: Auth событие:', event, 'Пользователь:', session?.user?.email);
+        console.log('🎯 AuthProvider: Auth событие:', event, 'Пропускать?', skipNextAuthEventRef.current);
         
-        // Обновляем состояние только если это не начальная загрузка
-        if (isInitialized) {
+        // Пропускаем INITIAL_SESSION событие после начальной загрузки
+        if (event === 'INITIAL_SESSION' && skipNextAuthEventRef.current) {
+          console.log('🔄 AuthProvider: Пропускаем INITIAL_SESSION событие');
+          skipNextAuthEventRef.current = false;
+          return;
+        }
+        
+        // Обновляем состояние только если пользователь действительно изменился
+        const currentUserId = user?.id;
+        const newUserId = session?.user?.id;
+        
+        if (currentUserId !== newUserId) {
+          console.log('🔄 AuthProvider: Пользователь изменился', { 
+            текущий: currentUserId, 
+            новый: newUserId 
+          });
+          
           setSession(session);
           setUser(session?.user ?? null);
           
           if (event === 'SIGNED_IN' && session?.user) {
+            console.log('👤 AuthProvider: Создаю профиль для нового пользователя');
             await createProfileIfNotExists(session.user);
           }
           
-          // Только при явном выходе перенаправляем
-          if (event === 'SIGNED_OUT') {
+          // Только при явном выходе и не на главной странице перенаправляем
+          if (event === 'SIGNED_OUT' && pathname !== '/') {
             console.log('🚪 AuthProvider: Пользователь вышел, перенаправляю на главную');
-            // Не используем router.push чтобы избежать ререндера на странице с книгами
-            if (pathname !== '/') {
-              router.push('/');
-            }
+            router.push('/');
           }
+        } else {
+          console.log('🔄 AuthProvider: Пользователь не изменился, пропускаю обновление');
         }
         
         setLoading(false);
@@ -121,7 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('🧹 AuthProvider: Отписываемся от событий');
       subscription.unsubscribe();
     };
-  }, [router, createProfileIfNotExists, isInitialized, pathname]);
+  }, [router, createProfileIfNotExists, pathname, user?.id]); // Добавили user?.id в зависимости
 
   const signIn = async (email: string, password: string): Promise<SignInResponse> => {
     console.log('🔑 AuthProvider: Попытка входа для', email);
@@ -177,7 +210,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     console.log('🚪 AuthProvider: Выход пользователя');
     await supabase.auth.signOut();
-    // Не перенаправляем здесь, onAuthStateChange обработает
   };
 
   return (
