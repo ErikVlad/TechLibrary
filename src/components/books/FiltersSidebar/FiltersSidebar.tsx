@@ -81,9 +81,10 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
     onFilterChange(filters);
   }, [search, selectedCategories, selectedYear, selectedTags, selectedAuthors, yearFrom, yearTo, router, onFilterChange]);
 
+  // Применяем фильтры при любом изменении
   useEffect(() => {
     applyFilters();
-  }, [applyFilters]);
+  }, [search, selectedCategories, selectedYear, selectedTags, selectedAuthors, yearFrom, yearTo, applyFilters]);
 
   const clearFilters = () => {
     setSearch('');
