@@ -15,25 +15,38 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
   const router = useRouter();
   
   // Инициализируем состояние из URL параметров
-  const [search, setSearch] = useState(searchParams.get('search') || '');
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(
-    searchParams.get('categories')?.split(',') || []
-  );
-  const [selectedYear, setSelectedYear] = useState<string>(searchParams.get('year') || 'all');
-  const [selectedTags, setSelectedTags] = useState<string[]>(
-    searchParams.get('tags')?.split(',') || []
-  );
-  const [selectedAuthors, setSelectedAuthors] = useState<string[]>(
-    searchParams.get('authors')?.split(',') || []
-  );
-  const [yearFrom, setYearFrom] = useState(searchParams.get('yearFrom') || '');
-  const [yearTo, setYearTo] = useState(searchParams.get('yearTo') || '');
+  const initialSearch = searchParams.get('search') || '';
+  const initialCategories = searchParams.get('categories')?.split(',').filter(Boolean) || [];
+  const initialYear = searchParams.get('year') || 'all';
+  const initialTags = searchParams.get('tags')?.split(',').filter(Boolean) || [];
+  const initialAuthors = searchParams.get('authors')?.split(',').filter(Boolean) || [];
+  const initialYearFrom = searchParams.get('yearFrom') || '';
+  const initialYearTo = searchParams.get('yearTo') || '';
+  
+  const [search, setSearch] = useState(initialSearch);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(initialCategories);
+  const [selectedYear, setSelectedYear] = useState<string>(initialYear);
+  const [selectedTags, setSelectedTags] = useState<string[]>(initialTags);
+  const [selectedAuthors, setSelectedAuthors] = useState<string[]>(initialAuthors);
+  const [yearFrom, setYearFrom] = useState(initialYearFrom);
+  const [yearTo, setYearTo] = useState(initialYearTo);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Получаем уникальные значения из книг
-  const categories = Array.from(new Set(books.map(book => book.category)));
-  const tags = Array.from(new Set(books.flatMap(book => book.tags))).slice(0, 10);
-  const authors = Array.from(new Set(books.map(book => book.author)));
+  // Получаем уникальные значения из книг с фильтрацией undefined
+  const categories = Array.from(new Set(books
+    .map(book => book.category)
+    .filter((category): category is string => Boolean(category))
+  ));
+
+  const tags = Array.from(new Set(books
+    .flatMap(book => book.tags || [])
+    .filter((tag): tag is string => Boolean(tag))
+  )).slice(0, 10);
+
+  const authors = Array.from(new Set(books
+    .map(book => book.author)
+    .filter((author): author is string => Boolean(author))
+  ));
 
   // Функция для применения фильтров с обновлением URL
   const applyFilters = useCallback(() => {
@@ -69,13 +82,28 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
   // Применяем фильтры при изменении состояния
   useEffect(() => {
     if (isInitialized) {
-      applyFilters();
+      // Используем setTimeout для предотвращения множественных вызовов
+      const timer = setTimeout(() => {
+        applyFilters();
+      }, 100);
+      
+      return () => clearTimeout(timer);
     } else {
       setIsInitialized(true);
       // При первой загрузке сразу применяем фильтры из URL
       applyFilters();
     }
-  }, [search, selectedCategories, selectedYear, selectedTags, selectedAuthors, yearFrom, yearTo]);
+  }, [
+    search, 
+    selectedCategories, 
+    selectedYear, 
+    selectedTags, 
+    selectedAuthors, 
+    yearFrom, 
+    yearTo, 
+    applyFilters, 
+    isInitialized
+  ]);
 
   // Очистка фильтров
   const clearFilters = () => {
@@ -119,17 +147,16 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    setSearch(value);
     
     // Отменяем предыдущий таймаут
     if (searchTimeout) clearTimeout(searchTimeout);
     
     // Устанавливаем новый таймаут для дебаунса
-    setSearchTimeout(
-      setTimeout(() => {
-        setSearch(value);
-      }, 300)
-    );
+    const timeout = setTimeout(() => {
+      setSearch(value);
+    }, 300);
+    
+    setSearchTimeout(timeout);
   };
 
   // Очищаем таймаут при размонтировании
@@ -143,7 +170,11 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
     <div className={styles.filtersSidebar}>
       <div className={styles.filtersHeader}>
         <h2>Фильтры</h2>
-        <button className={styles.clearFilters} onClick={clearFilters}>
+        <button 
+          type="button" 
+          className={styles.clearFilters} 
+          onClick={clearFilters}
+        >
           <i className="fas fa-times"></i> Сбросить
         </button>
       </div>
@@ -159,25 +190,27 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
       </div>
 
       {/* Категории */}
-      <div className={styles.filterGroup}>
-        <div className={styles.filterTitle}>
-          <i className="fas fa-tag"></i>
-          <span>Категории</span>
+      {categories.length > 0 && (
+        <div className={styles.filterGroup}>
+          <div className={styles.filterTitle}>
+            <i className="fas fa-tag"></i>
+            <span>Категории</span>
+          </div>
+          <div className={styles.filterOptions}>
+            {categories.map(category => (
+              <div key={category} className={styles.filterOption}>
+                <input
+                  type="checkbox"
+                  id={`cat-${category}`}
+                  checked={selectedCategories.includes(category)}
+                  onChange={() => handleCategoryToggle(category)}
+                />
+                <label htmlFor={`cat-${category}`}>{category}</label>
+              </div>
+            ))}
+          </div>
         </div>
-        <div className={styles.filterOptions}>
-          {categories.map(category => (
-            <div key={category} className={styles.filterOption}>
-              <input
-                type="checkbox"
-                id={`cat-${category}`}
-                checked={selectedCategories.includes(category)}
-                onChange={() => handleCategoryToggle(category)}
-              />
-              <label htmlFor={`cat-${category}`}>{category}</label>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* Год издания */}
       <div className={styles.filterGroup}>
@@ -260,51 +293,59 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
       </div>
 
       {/* Авторы */}
-      <div className={styles.filterGroup}>
-        <div className={styles.filterTitle}>
-          <i className="fas fa-user"></i>
-          <span>Авторы</span>
+      {authors.length > 0 && (
+        <div className={styles.filterGroup}>
+          <div className={styles.filterTitle}>
+            <i className="fas fa-user"></i>
+            <span>Авторы</span>
+          </div>
+          <div className={styles.filterOptions}>
+            {authors.slice(0, 5).map(author => (
+              <div key={author} className={styles.filterOption}>
+                <input
+                  type="checkbox"
+                  id={`author-${author}`}
+                  checked={selectedAuthors.includes(author)}
+                  onChange={() => handleAuthorToggle(author)}
+                />
+                <label htmlFor={`author-${author}`}>{author}</label>
+              </div>
+            ))}
+            {authors.length > 5 && (
+              <div className={styles.moreAuthors}>
+                <i className="fas fa-ellipsis-h"></i> еще {authors.length - 5} авторов
+              </div>
+            )}
+          </div>
         </div>
-        <div className={styles.filterOptions}>
-          {authors.slice(0, 5).map(author => (
-            <div key={author} className={styles.filterOption}>
-              <input
-                type="checkbox"
-                id={`author-${author}`}
-                checked={selectedAuthors.includes(author)}
-                onChange={() => handleAuthorToggle(author)}
-              />
-              <label htmlFor={`author-${author}`}>{author}</label>
-            </div>
-          ))}
-          {authors.length > 5 && (
-            <div className={styles.moreAuthors}>
-              <i className="fas fa-ellipsis-h"></i> еще {authors.length - 5} авторов
-            </div>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Теги */}
-      <div className={styles.filterGroup}>
-        <div className={styles.filterTitle}>
-          <i className="fas fa-hashtag"></i>
-          <span>Популярные теги</span>
+      {tags.length > 0 && (
+        <div className={styles.filterGroup}>
+          <div className={styles.filterTitle}>
+            <i className="fas fa-hashtag"></i>
+            <span>Популярные теги</span>
+          </div>
+          <div className={styles.tagsContainer}>
+            {tags.map(tag => (
+              <span
+                key={tag}
+                className={`${styles.tag} ${selectedTags.includes(tag) ? styles.active : ''}`}
+                onClick={() => handleTagToggle(tag)}
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
         </div>
-        <div className={styles.tagsContainer}>
-          {tags.map(tag => (
-            <span
-              key={tag}
-              className={`${styles.tag} ${selectedTags.includes(tag) ? styles.active : ''}`}
-              onClick={() => handleTagToggle(tag)}
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-      </div>
+      )}
 
-      <button className={styles.applyButton} onClick={applyFilters}>
+      <button 
+        type="button" 
+        className={styles.applyButton} 
+        onClick={applyFilters}
+      >
         <i className="fas fa-filter"></i> Применить фильтры
       </button>
     </div>
