@@ -3,21 +3,22 @@ export interface Book {
   id: string;
   title: string;
   author: string;
-  description: string;
+  description?: string;  // Изменено: стало необязательным
   year: number;
   pages: number;
-  pdf_url?: string | null;  // Изменено: добавлен null
+  pdf_url?: string | null;
   category?: string;
   tags: string[];
   created_at?: string;
   updated_at?: string;
-  cover_url?: string | null;  // Изменено: добавлен null
+  cover_url?: string | null;
 }
 
-export interface NewBook extends Omit<Book, 'id' | 'created_at' | 'updated_at'> {
+// Для создания новой книги - убираем поля, которые генерируются автоматически
+export interface NewBook {
   title: string;
   author: string;
-  description: string;
+  description?: string;  // Теперь необязательное
   year: number;
   pages: number;
   pdf_url?: string | null;
@@ -26,12 +27,34 @@ export interface NewBook extends Omit<Book, 'id' | 'created_at' | 'updated_at'> 
   cover_url?: string | null;
 }
 
+// Упрощенная версия для формы добавления книги
+export interface BookFormData {
+  title: string;
+  author: string;
+  description?: string;
+  year?: number;
+  pages?: number;
+  pdf_url?: string;
+  category?: string;
+  tags?: string[];
+}
+
 export interface Filters {
-  search: string;
-  categories: string[];
-  authors: string[];
-  tags: string[];
-  year: string;
+  search?: string;
+  categories?: string[];
+  authors?: string[];
+  tags?: string[];
+  year?: string;
   yearFrom?: string;
   yearTo?: string;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  full_name?: string;
+  bio?: string;
+  avatar_url?: string;
+  created_at: string;
+  updated_at?: string;
 }

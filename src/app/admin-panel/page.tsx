@@ -1,7 +1,8 @@
+// app/admin-panel/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase/client';
 import { Book, NewBook } from '@/lib/types';
 import AddBookForm from './AddBookForm';
 import EditBookForm from './EditBookForm';
@@ -18,31 +19,6 @@ const debugError = (...args: unknown[]) => {
   console.log(`[${timestamp}] ERROR:`, ...args);
 };
 
-// Тип для данных книги при отправке в Supabase
-interface BookData {
-  title: string;
-  author: string;
-  description: string;
-  year: number;
-  pages: number;
-  category: string;
-  tags: string[];
-  pdf_url: string | null;
-  created_at: string;
-}
-
-// Тип для данных обновления книги
-interface UpdateBookData {
-  title: string;
-  author: string;
-  description: string;
-  year: number;
-  pages: number;
-  category: string;
-  tags: string[];
-  pdf_url: string | null;
-}
-
 export default function AdminPanel() {
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,6 +26,7 @@ export default function AdminPanel() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [uploadingPDF, setUploadingPDF] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [storageReady, setStorageReady] = useState(false);
 
   // Проверяем Storage
@@ -58,19 +35,16 @@ export default function AdminPanel() {
       try {
         debugLog('Проверка Storage...');
         
-        const { error } = await supabase.storage
+        const { data, error } = await supabase.storage
           .from('pdf-books')
           .list();
         
-        if (error && error.message.includes('does not exist')) {
-          debugError('Bucket pdf-books не существует');
-          debugError('Создайте bucket вручную в Supabase Dashboard:');
-          debugError('1. Storage → New bucket');
-          debugError('2. Name: pdf-books');
-          debugError('3. Public: Yes');
-          debugError('4. File size limit: 50MB');
-        } else if (error) {
-          debugError('Ошибка проверки Storage:', error.message);
+        if (error) {
+          if (error.message.includes('does not exist')) {
+            debugError('Bucket pdf-books не существует');
+          } else {
+            debugError('Ошибка проверки Storage:', error.message);
+          }
         } else {
           debugLog('Storage доступен');
           setStorageReady(true);
@@ -86,8 +60,9 @@ export default function AdminPanel() {
   // Загрузка книг
   const fetchBooks = async () => {
     try {
-      debugLog('Начало загрузки книг...');
+      debugLog('Загрузка книг...');
       setLoading(true);
+      
       const { data, error } = await supabase
         .from('books')
         .select('*')
@@ -95,30 +70,28 @@ export default function AdminPanel() {
 
       if (error) {
         debugError('Ошибка загрузки книг:', error);
-        throw error;
+        return;
       }
       
-      debugLog(`Успешно загружено книг: ${data?.length || 0}`);
+      debugLog(`Загружено книг: ${data?.length || 0}`);
       
-      // Преобразуем данные к типу Book
-      const formattedBooks: Book[] = (data || []).map(book => ({
-        id: book.id,
-        title: book.title || '',
-        author: book.author || '',
-        description: book.description || '',
-        year: book.year || new Date().getFullYear(),
-        pages: book.pages || 0,
-        category: book.category || 'programming',
-        tags: book.tags || [],
-        pdf_url: book.pdf_url || null,
-        ...(book.cover_url !== undefined && { cover_url: book.cover_url || null }),
-        created_at: book.created_at,
-        updated_at: book.updated_at,
+      const formattedBooks: Book[] = (data || []).map((item: any) => ({
+        id: item.id,
+        title: item.title || '',
+        author: item.author || '',
+        description: item.description || '',
+        year: item.year || new Date().getFullYear(),
+        pages: item.pages || 0,
+        category: item.category || 'programming',
+        tags: item.tags || [],
+        pdf_url: item.pdf_url || null,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
       }));
       
       setBooks(formattedBooks);
     } catch (error) {
-      debugError('Критическая ошибка загрузки книг:', error);
+      debugError('Ошибка загрузки:', error);
     } finally {
       setLoading(false);
     }
@@ -128,99 +101,104 @@ export default function AdminPanel() {
     fetchBooks();
   }, []);
 
-  // Загрузка PDF в Supabase Storage
+  // Упрощенная загрузка PDF
   const uploadPDF = async (file: File): Promise<string | null> => {
     if (!storageReady) {
-      debugError('Storage не готов. Создайте bucket pdf-books в Supabase Dashboard');
+      alert('⚠️ Storage не готов. Создайте bucket pdf-books в Supabase Dashboard');
       return null;
     }
     
     try {
-      debugLog('Начало загрузки PDF файла:', file.name, `${(file.size / 1024 / 1024).toFixed(2)} MB`);
+      debugLog('Начало загрузки:', file.name);
       setUploadingPDF(true);
+      setUploadProgress(0);
       
-      // Проверяем размер файла
+      // Проверка размера
       if (file.size > 50 * 1024 * 1024) {
-        throw new Error('Файл слишком большой. Максимальный размер: 50MB');
-      }
-      
-      // Проверяем тип файла
-      if (!file.type.includes('pdf')) {
-        throw new Error('Файл должен быть в формате PDF');
-      }
-      
-      // Генерируем уникальное имя файла
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-      
-      debugLog('Загрузка в Storage:', fileName);
-      
-      const { error: uploadError } = await supabase.storage
-        .from('pdf-books')
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: false,
-          contentType: 'application/pdf'
-        });
-      
-      if (uploadError) {
-        debugError('Ошибка загрузки в Storage:', uploadError.message);
+        alert('❌ Файл слишком большой. Максимум 50MB');
         return null;
       }
       
-      debugLog('Файл загружен в Storage');
+      // Проверка типа
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        alert('❌ Файл должен быть PDF');
+        return null;
+      }
       
-      // Получаем публичный URL
+      // Имя файла
+      const fileName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+      debugLog('Загрузка файла:', fileName);
+      
+      // Загрузка
+      const { error } = await supabase.storage
+        .from('pdf-books')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+      
+      if (error) {
+        debugError('Ошибка загрузки:', error);
+        alert(`❌ Ошибка загрузки: ${error.message}`);
+        return null;
+      }
+      
+      // Получаем URL
       const { data: { publicUrl } } = supabase.storage
         .from('pdf-books')
         .getPublicUrl(fileName);
       
-      debugLog('Публичный URL получен:', publicUrl);
+      debugLog('Файл загружен:', publicUrl);
+      setUploadProgress(100);
+      
       return publicUrl;
     } catch (error) {
-      debugError('Ошибка загрузки PDF:', error);
+      debugError('Неожиданная ошибка:', error);
+      alert('❌ Неожиданная ошибка при загрузке');
       return null;
     } finally {
-      setUploadingPDF(false);
+      setTimeout(() => {
+        setUploadingPDF(false);
+        setUploadProgress(0);
+      }, 1000);
     }
   };
 
-  // Добавление книги - ИСПРАВЛЕННАЯ ВЕРСИЯ
+  // Добавление книги - КРАЙНЕ УПРОЩЕННАЯ ВЕРСИЯ
   const handleAddBook = async (newBook: NewBook, pdfFile?: File) => {
-    debugLog('Начало добавления книги:', newBook.title);
+    debugLog('Добавление книги:', newBook.title);
     
-    // Подготавливаем данные для вставки - БЕЗ cover_url
-    const bookData: BookData = {
-      title: newBook.title || '',
-      author: newBook.author || '',
-      description: newBook.description || '',
-      year: newBook.year || new Date().getFullYear(),
-      pages: newBook.pages || 0,
-      category: newBook.category || 'programming',
-      tags: newBook.tags || [],
-      pdf_url: newBook.pdf_url || null,
-      created_at: new Date().toISOString(),
-    };
-    
-    debugLog('Подготовленные данные:', bookData);
-
     try {
-      let pdfUrl = bookData.pdf_url;
+      let pdfUrl = newBook.pdf_url || null;
       
+      // Загружаем PDF если есть файл
       if (pdfFile) {
         debugLog('Загрузка PDF файла...');
         const uploadedUrl = await uploadPDF(pdfFile);
         if (uploadedUrl) {
           pdfUrl = uploadedUrl;
-          debugLog('PDF успешно загружен:', uploadedUrl);
         } else {
-          debugLog('Не удалось загрузить PDF');
+          return { 
+            success: false, 
+            message: '❌ Не удалось загрузить PDF' 
+          };
         }
       }
       
-      bookData.pdf_url = pdfUrl;
+      // Данные для вставки
+      const bookData = {
+        title: newBook.title?.trim() || '',
+        author: newBook.author?.trim() || '',
+        description: newBook.description?.trim() || '',
+        year: newBook.year || new Date().getFullYear(),
+        pages: newBook.pages || 0,
+        category: newBook.category || 'programming',
+        tags: newBook.tags || [],
+        pdf_url: pdfUrl,
+        created_at: new Date().toISOString(),
+      };
       
-      debugLog('Отправка в Supabase:', bookData);
+      debugLog('Отправка данных:', bookData);
       
       const { data, error } = await supabase
         .from('books')
@@ -228,88 +206,71 @@ export default function AdminPanel() {
         .select();
 
       if (error) {
-        debugError('Ошибка Supabase:', {
-          code: error.code,
-          message: error.message,
-          details: error.details
-        });
+        debugError('Ошибка Supabase:', error);
         
         if (error.code === '23505') {
-          throw new Error('Книга с таким названием уже существует');
-        } else if (error.code === '42501') {
-          throw new Error('Нет прав для добавления книги');
-        } else if (error.message.includes('cover_url')) {
-          throw new Error('Столбец cover_url не найден в таблице. Удалите cover_url из данных');
+          return { success: false, message: '❌ Книга с таким названием уже есть' };
         }
         
-        throw error;
+        return { success: false, message: `❌ Ошибка: ${error.message}` };
       }
       
-      if (data && data.length > 0) {
-        const newBook: Book = {
+      if (data?.[0]) {
+        const addedBook: Book = {
           id: data[0].id,
-          title: data[0].title,
-          author: data[0].author,
-          description: data[0].description || '',
-          year: data[0].year,
-          pages: data[0].pages,
-          category: data[0].category || 'programming',
-          tags: data[0].tags || [],
-          pdf_url: data[0].pdf_url || null,
-          ...(data[0].cover_url !== undefined && { cover_url: data[0].cover_url || null }),
-          created_at: data[0].created_at,
-          updated_at: data[0].updated_at,
+          ...bookData,
+          updated_at: data[0].updated_at || data[0].created_at,
         };
         
-        debugLog('Книга добавлена:', newBook);
-        setBooks([newBook, ...books]);
+        debugLog('✅ Книга добавлена:', addedBook);
+        setBooks(prev => [addedBook, ...prev]);
+        
+        // Показываем сообщение в консоли
+        console.log('✅ Книга успешно добавлена! ID:', addedBook.id);
+        
         return { 
           success: true, 
-          message: 'Книга успешно добавлена!' 
+          message: '✅ Книга успешно добавлена!',
+          data: addedBook
         };
-      } else {
-        throw new Error('Книга не была добавлена');
       }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
-      debugError('Ошибка добавления книги:', errorMessage);
       
       return { 
         success: false, 
-        message: `Ошибка: ${errorMessage}` 
+        message: '❌ Книга не была добавлена' 
+      };
+      
+    } catch (error: any) {
+      debugError('Ошибка:', error);
+      return { 
+        success: false, 
+        message: `❌ Ошибка: ${error?.message || 'Неизвестная'}` 
       };
     }
   };
 
   // Обновление книги
   const handleUpdateBook = async (updatedBook: Book, pdfFile?: File) => {
-    debugLog('Обновление книги:', updatedBook.id, updatedBook.title);
-
+    debugLog('Обновление книги:', updatedBook.id);
+    
     try {
-      let pdfUrl = updatedBook.pdf_url || null;
+      let pdfUrl = updatedBook.pdf_url;
       
       if (pdfFile) {
         const uploadedUrl = await uploadPDF(pdfFile);
-        if (uploadedUrl) {
-          pdfUrl = uploadedUrl;
-        }
+        if (uploadedUrl) pdfUrl = uploadedUrl;
       }
       
-      // Данные для обновления - БЕЗ cover_url
-      const updateData: UpdateBookData = {
+      const updateData = {
         title: updatedBook.title,
         author: updatedBook.author,
-        description: updatedBook.description || '',
+        description: updatedBook.description,
         year: updatedBook.year,
         pages: updatedBook.pages,
-        category: updatedBook.category || 'programming',
-        tags: updatedBook.tags || [],
+        category: updatedBook.category,
+        tags: updatedBook.tags,
         pdf_url: pdfUrl,
       };
-      
-      
-      
-      debugLog('Данные для обновления:', updateData);
       
       const { data, error } = await supabase
         .from('books')
@@ -318,60 +279,28 @@ export default function AdminPanel() {
         .select();
 
       if (error) {
-        debugError('Ошибка обновления:', {
-          message: error.message,
-          code: error.code,
-          details: error.details
-        });
+        debugError('Ошибка обновления:', error);
         throw error;
       }
       
-      if (data && data.length > 0) {
-        const updated: Book = {
-          id: data[0].id,
-          title: data[0].title,
-          author: data[0].author,
-          description: data[0].description || '',
-          year: data[0].year,
-          pages: data[0].pages,
-          category: data[0].category || 'programming',
-          tags: data[0].tags || [],
-          pdf_url: data[0].pdf_url || null,
-          // cover_url может отсутствовать
-          ...(data[0].cover_url !== undefined && { cover_url: data[0].cover_url || null }),
-          created_at: data[0].created_at,
-          updated_at: data[0].updated_at,
-        };
-        
-        setBooks(books.map(book => 
-          book.id === updated.id ? updated : book
-        ));
+      if (data?.[0]) {
+        const updated = { ...updatedBook, ...data[0] };
+        setBooks(prev => prev.map(b => b.id === updated.id ? updated : b));
         setEditingBook(null);
-        
-        return { 
-          success: true, 
-          message: 'Книга успешно обновлена!' 
-        };
+        return { success: true, message: '✅ Книга обновлена!' };
       }
       
-      throw new Error('Книга не была обновлена');
+      return { success: false, message: '❌ Книга не обновлена' };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
-      debugError('Ошибка обновления книги:', errorMessage);
-      
-      return { 
-        success: false, 
-        message: `Ошибка: ${errorMessage}` 
-      };
+      debugError('Ошибка:', error);
+      return { success: false, message: '❌ Ошибка обновления' };
     }
   };
 
   // Удаление книги
-  const handleDeleteBook = async (id: string): Promise<{ success: boolean; message: string }> => {
-    debugLog('Удаление книги:', id);
-    
-    if (!confirm('Вы уверены, что хотите удалить эту книгу?')) {
-      return { success: false, message: 'Удаление отменено' };
+  const handleDeleteBook = async (id: string) => {
+    if (!confirm('Удалить книгу?')) {
+      return { success: false, message: 'Отменено' };
     }
     
     try {
@@ -380,34 +309,26 @@ export default function AdminPanel() {
         .delete()
         .eq('id', id);
 
-      if (error) {
-        debugError('Ошибка удаления:', error);
-        throw error;
-      }
+      if (error) throw error;
       
-      setBooks(books.filter(book => book.id !== id));
-      return { success: true, message: 'Книга успешно удалена!' };
+      setBooks(prev => prev.filter(b => b.id !== id));
+      return { success: true, message: '✅ Книга удалена' };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
-      debugError('Ошибка удаления книги:', errorMessage);
-      
-      return { 
-        success: false, 
-        message: `Ошибка: ${errorMessage}` 
-      };
+      debugError('Ошибка удаления:', error);
+      return { success: false, message: '❌ Ошибка удаления' };
     }
   };
 
   // Получение уникальных категорий
-  const categories = ['all', ...Array.from(new Set(books.map(b => b.category || 'programming').filter(Boolean) as string[]))];
+  const categories = ['all', ...Array.from(new Set(books.map(b => b.category || 'programming').filter(Boolean)))];
 
   // Фильтрация книг
   const filteredBooks = books.filter(book => {
-    const matchesSearch = searchTerm === '' || 
+    const matchesSearch = !searchTerm || 
       book.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       book.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      book.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      book.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+      (book.description?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      book.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesCategory = selectedCategory === 'all' || (book.category || 'programming') === selectedCategory;
     
@@ -419,6 +340,7 @@ export default function AdminPanel() {
       <header className="admin-header">
         <h1>📚 Админ-панель библиотеки</h1>
         <p>Управление книгами и контентом</p>
+        
         {!storageReady && (
           <div className="warning-banner">
             ⚠️ Для загрузки файлов создайте bucket в Supabase Dashboard:
@@ -430,6 +352,18 @@ export default function AdminPanel() {
             3. Public: Yes
             <br />
             4. File size limit: 50MB
+          </div>
+        )}
+        
+        {uploadingPDF && (
+          <div className="upload-status">
+            ⏳ Загрузка PDF файла... {uploadProgress}%
+            <div className="progress-bar">
+              <div 
+                className="progress-fill" 
+                style={{ width: `${uploadProgress}%` }}
+              ></div>
+            </div>
           </div>
         )}
       </header>
@@ -474,7 +408,7 @@ export default function AdminPanel() {
 
         <div className="admin-sections">
           <section className="form-section">
-            <h2>{editingBook ? '✏️ Редактировать книгу' : '➕ Добавить новую книгу'}</h2>
+            <h2>{editingBook ? '✏️ Редактировать книгу' : '➕ Добавить книгу'}</h2>
             {editingBook ? (
               <EditBookForm
                 book={editingBook}
@@ -483,7 +417,11 @@ export default function AdminPanel() {
                 uploadingPDF={uploadingPDF}
               />
             ) : (
-              <AddBookForm onSubmit={handleAddBook} uploadingPDF={uploadingPDF} storageReady={storageReady} />
+              <AddBookForm 
+                onSubmit={handleAddBook} 
+                uploadingPDF={uploadingPDF} 
+                storageReady={storageReady} 
+              />
             )}
           </section>
 
@@ -494,7 +432,7 @@ export default function AdminPanel() {
                 <div className="search-container">
                   <input
                     type="text"
-                    placeholder="Поиск по названию, автору, тегам..."
+                    placeholder="Поиск книг..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="search-input"
@@ -503,7 +441,7 @@ export default function AdminPanel() {
                     <button 
                       onClick={() => setSearchTerm('')}
                       className="clear-search-btn"
-                      title="Очистить поиск"
+                      title="Очистить"
                     >
                       ✕
                     </button>
@@ -527,7 +465,7 @@ export default function AdminPanel() {
                   className="refresh-btn"
                   disabled={loading}
                 >
-                  {loading ? '🔄 Загрузка...' : '🔄 Обновить'}
+                  {loading ? '🔄' : '🔄'}
                 </button>
               </div>
             </div>
@@ -540,14 +478,6 @@ export default function AdminPanel() {
             ) : filteredBooks.length === 0 ? (
               <div className="empty-state">
                 <p>📭 Книги не найдены</p>
-                {searchTerm && (
-                  <button
-                    onClick={() => setSearchTerm('')}
-                    className="clear-search-btn"
-                  >
-                    Очистить поиск
-                  </button>
-                )}
               </div>
             ) : (
               <BookList
