@@ -1,21 +1,18 @@
+// app/literature/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
-import SidebarLayout from '@/components/main-block/sidebar/SidebarLayout';
-import FiltersSidebar from '@/components/books/FiltersSidebar/FiltersSidebar';
-import BookGrid from '@/components/books/BookGrid/BookGrid';
+// Временно используем SimpleLayout
+import SimpleLayout from '@/components/main-block/sidebar/SimpleLayout';
 import { Book } from '@/lib/types';
 import { supabase } from '@/lib/supabase/client';
-import styles from './page.module.css';
 
 export default function LiteraturePage() {
   console.log('🚀 LiteraturePage: Начало рендера');
   
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  // Загрузка книг
   useEffect(() => {
     console.log('📚 LiteraturePage: Загрузка началась');
     
@@ -24,24 +21,15 @@ export default function LiteraturePage() {
     const loadBooks = async () => {
       try {
         console.log('🔍 LiteraturePage: Запрос к Supabase');
-        const { data, error: supabaseError } = await supabase
+        const { data } = await supabase
           .from('books')
           .select('*')
           .order('created_at', { ascending: false });
 
-        if (supabaseError) {
-          console.error('❌ LiteraturePage: Ошибка Supabase:', supabaseError);
-          throw supabaseError;
-        }
-
         console.log('✅ LiteraturePage: Получено книг:', data?.length || 0);
         
         if (mounted) {
-          if (!data || data.length === 0) {
-            console.log('📭 LiteraturePage: Нет книг в базе');
-            setBooks([]);
-            setError('Нет книг в базе данных.');
-          } else {
+          if (data && data.length > 0) {
             const booksData: Book[] = data.map(book => ({
               id: book.id,
               title: book.title,
@@ -56,15 +44,14 @@ export default function LiteraturePage() {
               updated_at: book.updated_at
             }));
             
-            console.log('💾 LiteraturePage: Устанавливаю книги в состояние');
+            console.log('💾 LiteraturePage: Устанавливаю книги');
             setBooks(booksData);
           }
           setLoading(false);
         }
       } catch (error) {
-        console.error('❌ LiteraturePage: Ошибка загрузки:', error);
+        console.error('❌ LiteraturePage: Ошибка:', error);
         if (mounted) {
-          setError('Ошибка загрузки книг');
           setLoading(false);
         }
       }
@@ -73,7 +60,7 @@ export default function LiteraturePage() {
     loadBooks();
     
     return () => {
-      console.log('🧹 LiteraturePage: Очистка эффекта');
+      console.log('🧹 LiteraturePage: Очистка');
       mounted = false;
     };
   }, []);
@@ -86,50 +73,64 @@ export default function LiteraturePage() {
 
   console.log('🔄 LiteraturePage: Конец рендера', {
     loading,
-    booksCount: books.length,
-    error
+    booksCount: books.length
   });
 
   return (
-    <SidebarLayout
+    <SimpleLayout
       filters={
-        <FiltersSidebar
-          books={books}
-          onFilterChange={() => {}} // Пустая функция
-        />
+        <div style={{ padding: '10px', backgroundColor: '#e8f4f8' }}>
+          <h3>Фильтры (упрощенные)</h3>
+          <p>Книг доступно: {books.length}</p>
+        </div>
       }
     >
-      <div className={styles.booksSection}>
-        <div className={styles.booksHeader}>
-          <h1>Каталог технической литературы</h1>
-          <p className={styles.booksCount}>
-            Книг в базе: <span>{books.length}</span>
-          </p>
-        </div>
+      <div style={{ padding: '20px' }}>
+        <h1>Каталог технической литературы</h1>
+        <p>Книг в базе: <strong>{books.length}</strong></p>
 
-        {error ? (
-          <div className={styles.errorContainer}>
-            <i className="fas fa-exclamation-triangle"></i>
-            <p>{error}</p>
-          </div>
-        ) : loading ? (
-          <div className={styles.loadingState}>
-            <div className={styles.loadingSpinner}></div>
-            <p>Загрузка книг...</p>
-          </div>
+        {loading ? (
+          <div>Загрузка книг...</div>
         ) : books.length === 0 ? (
-          <div className={styles.emptyState}>
-            <i className="fas fa-database"></i>
-            <h3>База данных пуста</h3>
-            <p>Добавьте книги через админ-панель Supabase</p>
-          </div>
+          <div>Нет книг в базе</div>
         ) : (
-          <BookGrid 
-            books={books} 
-            onBookSelect={handleBookSelect}
-          />
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+            gap: '20px',
+            marginTop: '20px'
+          }}>
+            {books.map(book => (
+              <div 
+                key={book.id}
+                style={{
+                  padding: '15px',
+                  backgroundColor: 'white',
+                  borderRadius: '8px',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}
+              >
+                <h3 style={{ marginTop: 0 }}>{book.title}</h3>
+                <p><strong>Автор:</strong> {book.author}</p>
+                <p><strong>Год:</strong> {book.year}</p>
+                <button 
+                  onClick={() => handleBookSelect(book)}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#0070f3',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Читать
+                </button>
+              </div>
+            ))}
+          </div>
         )}
       </div>
-    </SidebarLayout>
+    </SimpleLayout>
   );
 }
