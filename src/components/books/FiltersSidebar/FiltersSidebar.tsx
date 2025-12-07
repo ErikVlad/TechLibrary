@@ -27,21 +27,15 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
   );
   const [yearFrom, setYearFrom] = useState(searchParams.get('yearFrom') || '');
   const [yearTo, setYearTo] = useState(searchParams.get('yearTo') || '');
-  const [isInitialized, setIsInitialized] = useState(false);
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // Функция для форматирования категории с заглавной буквы
   const formatCategory = (category: string): string => {
     if (!category) return '';
     
-    // Убираем лишние пробелы
     const trimmed = category.trim();
-    
-    // Если строка пустая после обрезки
     if (!trimmed) return '';
     
-    // Форматируем: первая буква заглавная, остальные строчные
-    // Для составных слов (через пробел, дефис, слэш)
     return trimmed
       .toLowerCase()
       .split(/[\s-/]+/)
@@ -60,11 +54,12 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
         .filter(Boolean)
         .map(cat => formatCategory(cat))
     )
-  ).sort(); // Сортируем по алфавиту
+  ).sort();
 
   const tags = Array.from(new Set(books.flatMap(book => book.tags || []))).slice(0, 10);
   const authors = Array.from(new Set(books.map(book => book.author).filter(Boolean)));
 
+  // Применяем фильтры
   const applyFilters = useCallback(() => {
     const filters: Filters = {
       search,
@@ -76,6 +71,7 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
       yearTo
     };
     
+    // Обновляем URL
     const params = new URLSearchParams();
     
     if (search) params.set('search', search);
@@ -89,17 +85,14 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
     const newUrl = `${window.location.pathname}?${params.toString()}`;
     router.replace(newUrl, { scroll: false });
     
+    // Передаем фильтры родительскому компоненту
     onFilterChange(filters);
   }, [search, selectedCategories, selectedYear, selectedTags, selectedAuthors, yearFrom, yearTo, router, onFilterChange]);
 
+  // Применяем фильтры при изменении любого параметра
   useEffect(() => {
-    if (isInitialized) {
-      applyFilters();
-    } else {
-      setIsInitialized(true);
-      applyFilters();
-    }
-  }, [search, selectedCategories, selectedYear, selectedTags, selectedAuthors, yearFrom, yearTo]);
+    applyFilters();
+  }, [search, selectedCategories, selectedYear, selectedTags, selectedAuthors, yearFrom, yearTo, applyFilters]);
 
   const clearFilters = () => {
     setSearch('');
@@ -109,8 +102,6 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
     setSelectedAuthors([]);
     setYearFrom('');
     setYearTo('');
-    
-    router.replace(window.location.pathname, { scroll: false });
   };
 
   const handleCategoryToggle = (category: string) => {
