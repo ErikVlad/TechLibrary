@@ -16,8 +16,16 @@ export default function LiteraturePage() {
   const [currentPage, setCurrentPage] = useState(1);
   const booksPerPage = 12;
   
-  // Флаг, чтобы не применять фильтры до загрузки книг
-  const [shouldApplyFilters, setShouldApplyFilters] = useState(false);
+  // Состояние фильтров - управляем ими здесь
+  const [activeFilters, setActiveFilters] = useState<Filters>({
+    search: '',
+    categories: [],
+    year: 'all',
+    tags: [],
+    authors: [],
+    yearFrom: '',
+    yearTo: ''
+  });
 
   // Загрузка книг
   const loadBooks = useCallback(async () => {
@@ -52,10 +60,8 @@ export default function LiteraturePage() {
         }));
         
         setBooks(booksData);
-        // ПЕРВОНАЧАЛЬНО показываем ВСЕ книги
+        // Показываем ВСЕ книги при первой загрузке
         setFilteredBooks(booksData);
-        // Разрешаем применять фильтры после загрузки
-        setShouldApplyFilters(true);
       }
     } catch (error) {
       console.error('Error loading books:', error);
@@ -72,7 +78,7 @@ export default function LiteraturePage() {
     loadBooks();
   }, [loadBooks]);
 
-  // Функция фильтрации книг
+  // Функция фильтрации
   const filterBooks = useCallback((booksList: Book[], filters: Filters): Book[] => {
     if (!booksList || booksList.length === 0) return [];
     
@@ -145,21 +151,23 @@ export default function LiteraturePage() {
     return filtered;
   }, []);
 
-  // Обработчик изменения фильтров
-  const handleFilterChange = useCallback((filters: Filters) => {
-    // Применяем фильтры только если книги загружены
-    if (books.length > 0 && shouldApplyFilters) {
-      const filtered = filterBooks(books, filters);
+  // Применяем фильтры при их изменении
+  useEffect(() => {
+    if (books.length > 0) {
+      const filtered = filterBooks(books, activeFilters);
       setFilteredBooks(filtered);
       setCurrentPage(1);
     }
-  }, [books, shouldApplyFilters, filterBooks]);
+  }, [books, activeFilters, filterBooks]);
+
+  // Обработчик от FiltersSidebar
+  const handleFilterChange = useCallback((filters: Filters) => {
+    setActiveFilters(filters);
+  }, []);
 
   const handleBookSelect = (book: Book) => {
     if (book.pdf_url && book.pdf_url !== '#') {
       window.open(book.pdf_url, '_blank');
-    } else {
-      alert('Ссылка на PDF не указана для этой книги');
     }
   };
 
@@ -190,7 +198,6 @@ export default function LiteraturePage() {
             className={styles.refreshBtn}
             onClick={loadBooks}
             disabled={loading}
-            title="Обновить список книг"
           >
             <i className={`fas fa-sync-alt ${loading ? 'fa-spin' : ''}`}></i>
             {loading ? ' Загрузка...' : ' Обновить'}
@@ -201,18 +208,16 @@ export default function LiteraturePage() {
           <div className={styles.errorContainer}>
             <i className="fas fa-exclamation-triangle"></i>
             <p>{error}</p>
-            <div className={styles.errorActions}>
-              <button onClick={loadBooks} className={styles.retryBtn}>
-                Попробовать снова
-              </button>
-            </div>
+            <button onClick={loadBooks} className={styles.retryBtn}>
+              Попробовать снова
+            </button>
           </div>
         )}
 
         {loading ? (
           <div className={styles.loadingState}>
             <div className={styles.loadingSpinner}></div>
-            <p>Загрузка книг из базы данных...</p>
+            <p>Загрузка книг...</p>
           </div>
         ) : (
           <>
@@ -224,7 +229,6 @@ export default function LiteraturePage() {
             {totalPages > 1 && (
               <div className={styles.pagination}>
                 <button 
-                  className={styles.pageBtn}
                   onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                   disabled={currentPage === 1}
                 >
@@ -246,7 +250,7 @@ export default function LiteraturePage() {
                   return (
                     <button
                       key={pageNum}
-                      className={`${styles.pageBtn} ${currentPage === pageNum ? styles.active : ''}`}
+                      className={currentPage === pageNum ? styles.active : ''}
                       onClick={() => setCurrentPage(pageNum)}
                     >
                       {pageNum}
@@ -255,7 +259,6 @@ export default function LiteraturePage() {
                 })}
                 
                 <button 
-                  className={styles.pageBtn}
                   onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                   disabled={currentPage === totalPages}
                 >
