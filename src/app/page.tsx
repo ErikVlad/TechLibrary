@@ -13,8 +13,8 @@ import styles from './page.module.css';
 export default function HomePage() {
   const [books, setBooks] = useState<Book[]>([]);
   const [filteredBooks, setFilteredBooks] = useState<Book[]>([]);
-  const [loadingBooks, setLoadingBooks] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [loadingBooks, setLoadingBooks] = useState<boolean>(true);
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const booksPerPage = 12;
   const router = useRouter();
   
@@ -22,14 +22,24 @@ export default function HomePage() {
   const { user, loading: authLoading } = useAuth();
 
   // Флаг для отслеживания монтирования компонента
-  const isMounted = useRef(true);
+  const isMounted = useRef<boolean>(true);
+  
+  // Ref для отслеживания предыдущего пользователя
+  const prevUserRef = useRef<string | undefined>();
 
-  // Функция загрузки книг
-  const loadBooks = useCallback(async () => {
+  // Функция загрузки книг с учетом авторизации
+  const loadBooks = useCallback(async (forceReload: boolean = false): Promise<void> => {
     if (!isMounted.current) return;
     
+    // Проверяем, изменился ли пользователь
+    const currentUserId = user?.id || 'anon';
+    if (!forceReload && prevUserRef.current === currentUserId) {
+      console.log('User unchanged, skipping book reload');
+      return;
+    }
+    
     setLoadingBooks(true);
-    console.log('Loading books, user:', user?.email || 'anon', 'authLoading:', authLoading);
+    console.log('Loading books for user:', user?.email || 'anon', 'ID:', currentUserId);
     
     try {
       // Разные запросы в зависимости от авторизации
@@ -38,10 +48,10 @@ export default function HomePage() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      // Если пользователь авторизован, можно добавить дополнительные условия
-      if (user) {
-        // query = query.or('is_public.eq.true,user_id.eq.' + user.id);
-        // Или просто все книги для авторизованных
+      // Если пользователь не авторизован, показываем только бесплатные/публичные книги
+      // Раскомментируйте и настройте в соответствии с вашей структурой БД
+      if (!user) {
+        // query = query.eq('is_public', true).or('is_free.eq.true');
       }
 
       const { data, error } = await query.limit(100);
@@ -54,8 +64,11 @@ export default function HomePage() {
       if (isMounted.current) {
         if (data && data.length > 0) {
           setBooks(data);
-          setFilteredBooks(data);
-          console.log(`Loaded ${data.length} books`);
+          setFilteredBooks(data); // Сбрасываем фильтры при смене пользователя
+          console.log(`Loaded ${data.length} books for user ${currentUserId}`);
+          
+          // Обновляем предыдущего пользователя
+          prevUserRef.current = currentUserId;
         } else {
           // Используем демо-данные только если нет реальных
           const demoBooks: Book[] = [
@@ -88,7 +101,8 @@ export default function HomePage() {
           ];
           setBooks(demoBooks);
           setFilteredBooks(demoBooks);
-          console.log('Using demo books');
+          prevUserRef.current = currentUserId;
+          console.log('Using demo books for user', currentUserId);
         }
       }
     } catch (error) {
@@ -96,15 +110,14 @@ export default function HomePage() {
     } finally {
       if (isMounted.current) {
         setLoadingBooks(false);
-        console.log('Books loading finished');
+        console.log('Books loading finished for user', currentUserId);
       }
     }
-  }, [user, authLoading]);
+  }, [user]);
 
   // Инициализация компонента
   useEffect(() => {
     isMounted.current = true;
-    
     console.log('HomePage mounted, authLoading:', authLoading);
     
     return () => {
@@ -112,40 +125,25 @@ export default function HomePage() {
     };
   }, []);
 
-  // Загружаем книги при изменении авторизации
+  // Основной эффект для загрузки книг
   useEffect(() => {
-    if (!authLoading) {
-      console.log('Auth initialized, loading books...');
-      loadBooks();
+    if (!authLoading && isMounted.current) {
+      console.log('Auth state stable, loading books...');
+      loadBooks(true); // force reload при первой загрузке
     }
-  }, [user, authLoading, loadBooks]);
+  }, [authLoading, loadBooks]);
 
-  // Слушаем события авторизации напрямую через Supabase
+  // Обработка смены пользователя
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('Auth state changed from HomePage:', event);
-        
-        // Перезагружаем книги при изменении авторизации
-        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-          console.log('Auth event triggered book reload');
-          // Даем время для обновления состояния AuthProvider
-          setTimeout(() => {
-            if (isMounted.current) {
-              loadBooks();
-            }
-          }, 500);
-        }
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [loadBooks]);
+    if (!authLoading && user) {
+      console.log('User authenticated:', user.email);
+      // Сброс страницы при смене пользователя
+      setCurrentPage(1);
+    }
+  }, [user, authLoading]);
 
   // Функция фильтрации
-  const applyFilters = useCallback((filters: Filters) => {
+  const applyFilters = useCallback((filters: Filters): void => {
     let filtered = [...books];
 
     // Поиск
@@ -233,10 +231,16 @@ export default function HomePage() {
     debouncedHandleFilterChange(filters);
   }, [debouncedHandleFilterChange]);
 
-  const handleBookSelect = (book: Book) => {
+  const handleBookSelect = (book: Book): void => {
     if (book.pdf_url) {
       window.open(book.pdf_url, '_blank');
     }
+  };
+
+  // Функция для сброса фильтров
+  const resetFilters = (): void => {
+    setFilteredBooks(books);
+    setCurrentPage(1);
   };
 
   // Пагинация
@@ -261,6 +265,7 @@ export default function HomePage() {
         <FiltersSidebar
           books={books}
           onFilterChange={handleFilterChange}
+          onResetFilters={resetFilters}
         />
       }
     >
@@ -269,10 +274,30 @@ export default function HomePage() {
           <div>
             <h1>Каталог технической литературы</h1>
             <p className={styles.booksCount}>
-              {user && <span style={{ color: 'var(--accent)', marginRight: '10px' }}>
-                👋 Привет, {user.email}
-              </span>}
+              {user && (
+                <span style={{ color: 'var(--accent)', marginRight: '10px' }}>
+                  👋 Привет, {user.email}
+                </span>
+              )}
               Показано <span>{filteredBooks.length}</span> из <span>{books.length}</span> книг
+              {(filteredBooks.length !== books.length) && (
+                <button 
+                  onClick={resetFilters}
+                  className={styles.resetFiltersBtn}
+                  style={{
+                    marginLeft: '10px',
+                    padding: '4px 8px',
+                    background: 'var(--accent-light)',
+                    color: 'var(--accent)',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem'
+                  }}
+                >
+                  Сбросить фильтры
+                </button>
+              )}
             </p>
           </div>
         </div>
@@ -286,11 +311,22 @@ export default function HomePage() {
           <>
             {books.length === 0 ? (
               <div className={styles.emptyState}>
-                <i className="fas fa-books" style={{ fontSize: '3rem', marginBottom: '1rem', color: 'var(--text-secondary)' }}></i>
+                <i 
+                  className="fas fa-books" 
+                  style={{ 
+                    fontSize: '3rem', 
+                    marginBottom: '1rem', 
+                    color: 'var(--text-secondary)' 
+                  }}
+                ></i>
                 <h3>Книги не найдены</h3>
                 <p>Попробуйте обновить страницу или проверить соединение с базой данных</p>
                 {!user && (
-                  <p style={{ marginTop: '1rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                  <p style={{ 
+                    marginTop: '1rem', 
+                    fontSize: '0.9rem', 
+                    color: 'var(--text-secondary)' 
+                  }}>
                     После авторизации могут появиться дополнительные книги
                   </p>
                 )}
@@ -313,7 +349,7 @@ export default function HomePage() {
                     </button>
                     
                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      let pageNum;
+                      let pageNum: number;
                       if (totalPages <= 5) {
                         pageNum = i + 1;
                       } else if (currentPage <= 3) {
