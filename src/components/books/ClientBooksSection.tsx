@@ -2,21 +2,34 @@
 
 import { useState, useEffect } from 'react';
 import { Book, Filters } from '@/lib/types';
-import FiltersSidebar from './FiltersSidebar';
-import BookGrid from './BookGrid';
+import FiltersSidebar from './FiltersSidebar/FiltersSidebar';
+import BookGrid from './BookGrid/BookGrid';
+import styles from './ClientBooksSection.module.css';
 
-export default function BooksPage({ initialBooks }: { initialBooks: Book[] }) {
-  const [allBooks, setAllBooks] = useState<Book[]>(initialBooks);
+interface ClientBooksSectionProps {
+  initialBooks: Book[];
+}
+
+export default function ClientBooksSection({ initialBooks }: ClientBooksSectionProps) {
+  const [books, setBooks] = useState<Book[]>(initialBooks);
   const [filteredBooks, setFilteredBooks] = useState<Book[]>(initialBooks);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [filters, setFilters] = useState<Filters>({
+    search: '',
+    categories: [],
+    year: 'all',
+    tags: [],
+    authors: [],
+    yearFrom: '',
+    yearTo: ''
+  });
 
-  // Функция фильтрации книг
-  const filterBooks = (books: Book[], filters: Filters): Book[] => {
-    let result = [...books];
+  // Фильтрация книг
+  const applyFilters = (booksList: Book[], filterParams: Filters): Book[] => {
+    let result = [...booksList];
 
-    // Поиск по тексту
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
+    // Поиск
+    if (filterParams.search) {
+      const searchLower = filterParams.search.toLowerCase();
       result = result.filter(book => 
         (book.title && book.title.toLowerCase().includes(searchLower)) ||
         (book.author && book.author.toLowerCase().includes(searchLower)) ||
@@ -24,34 +37,34 @@ export default function BooksPage({ initialBooks }: { initialBooks: Book[] }) {
       );
     }
 
-    // Фильтр по категориям
-    if (filters.categories.length > 0) {
+    // Категории
+    if (filterParams.categories.length > 0) {
       result = result.filter(book => 
-        book.category && filters.categories.includes(book.category)
+        book.category && filterParams.categories.includes(book.category)
       );
     }
 
-    // Фильтр по тегам
-    if (filters.tags.length > 0) {
+    // Теги
+    if (filterParams.tags.length > 0) {
       result = result.filter(book => 
-        book.tags && book.tags.some(tag => filters.tags.includes(tag))
+        book.tags && book.tags.some(tag => filterParams.tags.includes(tag))
       );
     }
 
-    // Фильтр по авторам
-    if (filters.authors.length > 0) {
+    // Авторы
+    if (filterParams.authors.length > 0) {
       result = result.filter(book => 
-        book.author && filters.authors.includes(book.author)
+        book.author && filterParams.authors.includes(book.author)
       );
     }
 
-    // Фильтр по году
-    if (filters.year !== 'all') {
+    // Год
+    if (filterParams.year !== 'all') {
       result = result.filter(book => {
         const year = book.year;
         if (!year) return false;
         
-        switch (filters.year) {
+        switch (filterParams.year) {
           case '2025':
             return year === 2025;
           case '2024':
@@ -67,17 +80,17 @@ export default function BooksPage({ initialBooks }: { initialBooks: Book[] }) {
     }
 
     // Диапазон годов
-    if (filters.yearFrom) {
-      const yearFromNum = parseInt(filters.yearFrom);
+    if (filterParams.yearFrom) {
+      const yearFromNum = parseInt(filterParams.yearFrom);
       if (!isNaN(yearFromNum)) {
-        result = result.filter(book => book.year >= yearFromNum);
+        result = result.filter(book => book.year && book.year >= yearFromNum);
       }
     }
 
-    if (filters.yearTo) {
-      const yearToNum = parseInt(filters.yearTo);
+    if (filterParams.yearTo) {
+      const yearToNum = parseInt(filterParams.yearTo);
       if (!isNaN(yearToNum)) {
-        result = result.filter(book => book.year <= yearToNum);
+        result = result.filter(book => book.year && book.year <= yearToNum);
       }
     }
 
@@ -85,18 +98,15 @@ export default function BooksPage({ initialBooks }: { initialBooks: Book[] }) {
   };
 
   // Обработчик изменения фильтров
-  const handleFilterChange = (filters: Filters) => {
-    if (allBooks.length === 0) return;
-    
-    const filtered = filterBooks(allBooks, filters);
+  const handleFilterChange = (newFilters: Filters) => {
+    setFilters(newFilters);
+    const filtered = applyFilters(books, newFilters);
     setFilteredBooks(filtered);
   };
 
-  // При загрузке компонента сразу применяем фильтры из URL
+  // При инициализации сразу применяем фильтры из URL
   useEffect(() => {
-    if (!isInitialized && allBooks.length > 0) {
-      setIsInitialized(true);
-      // Создаем начальные фильтры из URL
+    if (typeof window !== 'undefined') {
       const searchParams = new URLSearchParams(window.location.search);
       const initialFilters: Filters = {
         search: searchParams.get('search') || '',
@@ -108,35 +118,48 @@ export default function BooksPage({ initialBooks }: { initialBooks: Book[] }) {
         yearTo: searchParams.get('yearTo') || '',
       };
       
-      const filtered = filterBooks(allBooks, initialFilters);
+      setFilters(initialFilters);
+      const filtered = applyFilters(books, initialFilters);
       setFilteredBooks(filtered);
     }
-  }, [allBooks, isInitialized]);
+  }, [books]);
 
-  // Обновляем фильтры при изменении начальных книг
+  // Обновляем при изменении начальных книг
   useEffect(() => {
-    if (initialBooks.length > 0) {
-      setAllBooks(initialBooks);
-      setFilteredBooks(initialBooks);
-    }
+    setBooks(initialBooks);
+    const filtered = applyFilters(initialBooks, filters);
+    setFilteredBooks(filtered);
   }, [initialBooks]);
 
+  const handleBookSelect = (book: Book) => {
+    if (book.pdf_url) {
+      window.open(book.pdf_url, '_blank');
+    }
+  };
+
   return (
-    <div className="books-page">
-      <FiltersSidebar 
-        books={allBooks} 
-        onFilterChange={handleFilterChange} 
-      />
-      
-      <div className="books-content">
-        <BookGrid 
-          books={filteredBooks} 
-          onBookSelect={(book) => {
-            if (book.pdf_url) {
-              window.open(book.pdf_url, '_blank');
-            }
-          }}
+    <div className={styles.booksSection}>
+      <div className={styles.booksHeader}>
+        <div>
+          <h1>Каталог технической литературы</h1>
+          <p className={styles.booksCount}>
+            Показано <span>{filteredBooks.length}</span> из <span>{books.length}</span> книг
+          </p>
+        </div>
+      </div>
+
+      <div className={styles.booksContainer}>
+        <FiltersSidebar 
+          books={books} 
+          onFilterChange={handleFilterChange} 
         />
+        
+        <div className={styles.booksContent}>
+          <BookGrid 
+            books={filteredBooks} 
+            onBookSelect={handleBookSelect}
+          />
+        </div>
       </div>
     </div>
   );
