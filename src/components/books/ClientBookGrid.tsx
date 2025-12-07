@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Book } from '@/lib/types';
 import BookCard from './BookCard/BookCard';
-import styles from './BookGrid/BookGrid.module.css';
+import styles from './BookGrid.module.css';
 
 interface ClientBookGridProps {
   initialBooks: Book[];
@@ -15,13 +15,27 @@ export default function ClientBookGrid({ initialBooks }: ClientBookGridProps) {
   const booksPerPage = 12;
 
   const handleBookSelect = (book: Book) => {
-    window.open(book.pdf_url, '_blank');
+    if (book.pdf_url) {
+      window.open(book.pdf_url, '_blank');
+    } else {
+      console.error('PDF URL не найден');
+    }
   };
 
   const totalPages = Math.ceil(books.length / booksPerPage);
   const startIndex = (currentPage - 1) * booksPerPage;
   const endIndex = startIndex + booksPerPage;
   const currentBooks = books.slice(startIndex, endIndex);
+
+  if (!books || books.length === 0) {
+    return (
+      <div className={styles.emptyState}>
+        <i className="fas fa-book-open"></i>
+        <h3>Книги не найдены</h3>
+        <p>Попробуйте изменить параметры поиска или фильтры</p>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -46,7 +60,7 @@ export default function ClientBookGrid({ initialBooks }: ClientBookGridProps) {
           </button>
           
           {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-            let pageNum;
+            let pageNum: number;
             if (totalPages <= 5) {
               pageNum = i + 1;
             } else if (currentPage <= 3) {
