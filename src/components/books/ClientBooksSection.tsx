@@ -10,10 +10,17 @@ interface ClientBooksSectionProps {
 }
 
 export default function ClientBooksSection({ initialBooks }: ClientBooksSectionProps) {
-  const [books] = useState<Book[]>(initialBooks);
+  const [books, setBooks] = useState<Book[]>(initialBooks);
   const [filteredBooks, setFilteredBooks] = useState<Book[]>(initialBooks);
   const [currentPage, setCurrentPage] = useState(1);
   const booksPerPage = 12;
+
+  // Ключевое исправление: сбрасываем состояние при изменении initialBooks
+  useEffect(() => {
+    setBooks(initialBooks);
+    setFilteredBooks(initialBooks);
+    setCurrentPage(1); // Сбрасываем пагинацию при изменении книг
+  }, [initialBooks]);
 
   const handleBookSelect = (book: Book) => {
     window.open(book.pdf_url, '_blank');
@@ -24,11 +31,6 @@ export default function ClientBooksSection({ initialBooks }: ClientBooksSectionP
   const startIndex = (currentPage - 1) * booksPerPage;
   const endIndex = startIndex + booksPerPage;
   const currentBooks = filteredBooks.slice(startIndex, endIndex);
-
-  // Обновляем фильтры при изменении начальных книг
-  useEffect(() => {
-    setFilteredBooks(books);
-  }, [books]);
 
   return (
     <div className={styles.booksSection}>
