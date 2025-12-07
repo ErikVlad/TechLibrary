@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import SidebarLayout from '@/components/main-block/sidebar/SidebarLayout';
 import FiltersSidebar from '@/components/books/FiltersSidebar/FiltersSidebar';
 import BookGrid from '@/components/books/BookGrid/BookGrid';
@@ -15,18 +15,50 @@ export default function LiteraturePage() {
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [user, setUser] = useState<any>(null);
+  const [filterResetKey, setFilterResetKey] = useState(0);
   const booksPerPage = 12;
+  
+  const prevUserRef = useRef<string | null>(null);
 
-  // Загрузка текущего пользователя
+  // Загрузка текущего пользователя с сбросом фильтров при смене
   useEffect(() => {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
+      const currentUserId = user?.id || null;
+      
+      // Если пользователь изменился (вошёл или вышел), сбрасываем фильтры
+      if (currentUserId !== prevUserRef.current) {
+        console.log('Пользователь изменился, сбрасываем фильтры');
+        setFilterResetKey(prev => prev + 1);
+        prevUserRef.current = currentUserId;
+        
+        // Сбрасываем состояние книг
+        setBooks([]);
+        setFilteredBooks([]);
+        setCurrentPage(1);
+        setLoading(true);
+      }
+      
       setUser(user);
     };
     
     getUser();
     
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const currentUserId = session?.user?.id || null;
+      
+      if (currentUserId !== prevUserRef.current) {
+        console.log('Состояние аутентификации изменилось, сбрасываем фильтры');
+        setFilterResetKey(prev => prev + 1);
+        prevUserRef.current = currentUserId;
+        
+        // Сбрасываем состояние книг
+        setBooks([]);
+        setFilteredBooks([]);
+        setCurrentPage(1);
+        setLoading(true);
+      }
+      
       setUser(session?.user || null);
     });
     
@@ -38,7 +70,10 @@ export default function LiteraturePage() {
       setLoading(true);
       setError(null);
       
-      console.log('Загрузка книг из Supabase...');
+      console.log('Загрузка книг из Supabase для пользователя:', user?.id || 'anonymous');
+      
+      // Добавляем задержку для демонстрации (можно убрать)
+      await new Promise(resolve => setTimeout(resolve, 300));
       
       const { data, error: supabaseError } = await supabase
         .from('books')
@@ -50,7 +85,7 @@ export default function LiteraturePage() {
         throw new Error(`Ошибка Supabase: ${supabaseError.message}`);
       }
 
-      console.log('Данные получены из Supabase:', data);
+      console.log('Данные получены из Supabase:', data?.length, 'книг');
       
       if (!data || data.length === 0) {
         console.log('В базе данных нет книг');
@@ -72,7 +107,7 @@ export default function LiteraturePage() {
           updated_at: book.updated_at
         }));
         
-        console.log('Преобразованные книги:', booksData);
+        console.log('Преобразованные книги:', booksData.length);
         setBooks(booksData);
         setFilteredBooks(booksData);
       }
@@ -85,13 +120,13 @@ export default function LiteraturePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]); // Добавляем user в зависимости
 
   useEffect(() => {
     loadBooks();
   }, [loadBooks]);
 
-  const handleFilterChange = (filters: Filters) => {
+  const handleFilterChange = useCallback((filters: Filters) => {
     let filtered = [...books];
 
     // Поиск по названию и автору
@@ -159,7 +194,7 @@ export default function LiteraturePage() {
 
     setFilteredBooks(filtered);
     setCurrentPage(1);
-  };
+  }, [books]);
 
   const handleBookSelect = (book: Book) => {
     if (book.pdf_url && book.pdf_url !== '#') {
@@ -179,9 +214,10 @@ export default function LiteraturePage() {
     <SidebarLayout
       filters={
         <FiltersSidebar
-          key={user?.id || 'anonymous'} // Ключевое изменение: перемонтирование компонента при смене пользователя
+          key={`${user?.id || 'anonymous'}-${filterResetKey}`} // Двойной ключ для гарантированного сброса
           books={books}
           onFilterChange={handleFilterChange}
+          initialFilters={null} // Явно передаём null для сброса
         />
       }
     >
@@ -190,19 +226,33 @@ export default function LiteraturePage() {
           <div>
             <h1>Каталог технической литературы</h1>
             <p className={styles.booksCount}>
+              {user ? `Привет, ${user.email}!` : 'Вы не авторизованы'} • 
               Показано <span>{filteredBooks.length}</span> из <span>{books.length}</span> книг
-              {error && ' (из базы данных)'}
             </p>
           </div>
-          <button 
-            className={styles.refreshBtn}
-            onClick={loadBooks}
-            disabled={loading}
-            title="Обновить список книг"
-          >
-            <i className={`fas fa-sync-alt ${loading ? 'fa-spin' : ''}`}></i>
-            {loading ? ' Загрузка...' : ' Обновить'}
-          </button>
+          <div className={styles.headerActions}>
+            {user && (
+              <button 
+                className={styles.authBtn}
+                onClick={async () => {
+                  await supabase.auth.signOut();
+                  // Фильтры сбросятся автоматически через onAuthStateChange
+                }}
+                title="Выйти из аккаунта"
+              >
+                <i className="fas fa-sign-out-alt"></i> Выйти
+              </button>
+            )}
+            <button 
+              className={styles.refreshBtn}
+              onClick={loadBooks}
+              disabled={loading}
+              title="Обновить список книг"
+            >
+              <i className={`fas fa-sync-alt ${loading ? 'fa-spin' : ''}`}></i>
+              {loading ? ' Загрузка...' : ' Обновить'}
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -229,12 +279,20 @@ export default function LiteraturePage() {
           <div className={styles.loadingState}>
             <div className={styles.loadingSpinner}></div>
             <p>Загрузка книг из базы данных...</p>
+            <p className={styles.loadingSubtext}>
+              {user ? 'Загружаются книги для вашего аккаунта' : 'Загружаются общедоступные книги'}
+            </p>
           </div>
         ) : books.length === 0 ? (
           <div className={styles.emptyState}>
             <i className="fas fa-database"></i>
             <h3>База данных пуста</h3>
-            <p>Добавьте книги через админ-панель Supabase</p>
+            <p>
+              {user 
+                ? 'Для вашего аккаунта не найдено доступных книг'
+                : 'Добавьте книги через админ-панель Supabase'
+              }
+            </p>
             <div className={styles.emptyActions}>
               <button onClick={loadBooks} className={styles.retryBtn}>
                 Проверить снова
