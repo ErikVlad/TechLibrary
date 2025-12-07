@@ -2,7 +2,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { User, Session, AuthError } from '@supabase/supabase-js';
 
@@ -29,11 +29,15 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname(); // Добавляем pathname
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Флаг для отслеживания инициализации
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Функция для создания профиля если его нет (объявляем ДО использования)
+  // Функция для создания профиля если его нет
   const createProfileIfNotExists = useCallback(async (user: User) => {
     try {
       const { data: existingProfile } = await supabase
@@ -63,56 +67,81 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    console.log('🔄 AuthProvider: Инициализация началась');
+    
     // Проверяем активную сессию
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      console.log('🔐 AuthProvider: Получена сессия', session ? 'есть' : 'нет');
       setSession(session);
       setUser(session?.user ?? null);
       
       if (session?.user) {
+        console.log('👤 AuthProvider: Создаю профиль для пользователя');
         await createProfileIfNotExists(session.user);
       }
       
       setLoading(false);
+      setIsInitialized(true);
+      console.log('✅ AuthProvider: Инициализация завершена');
+    }).catch(error => {
+      console.error('❌ AuthProvider: Ошибка получения сессии:', error);
+      setLoading(false);
+      setIsInitialized(true);
     });
 
     // Слушаем изменения аутентификации
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth event:', event);
+        console.log('🎯 AuthProvider: Auth событие:', event, 'Пользователь:', session?.user?.email);
         
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        if (event === 'SIGNED_IN' && session?.user) {
-          await createProfileIfNotExists(session.user);
-        }
-        
-        if (event === 'SIGNED_OUT') {
-          router.push('/');
+        // Обновляем состояние только если это не начальная загрузка
+        if (isInitialized) {
+          setSession(session);
+          setUser(session?.user ?? null);
+          
+          if (event === 'SIGNED_IN' && session?.user) {
+            await createProfileIfNotExists(session.user);
+          }
+          
+          // Только при явном выходе перенаправляем
+          if (event === 'SIGNED_OUT') {
+            console.log('🚪 AuthProvider: Пользователь вышел, перенаправляю на главную');
+            // Не используем router.push чтобы избежать ререндера на странице с книгами
+            if (pathname !== '/') {
+              router.push('/');
+            }
+          }
         }
         
         setLoading(false);
       }
     );
 
-    return () => subscription.unsubscribe();
-  }, [router, createProfileIfNotExists]);
+    return () => {
+      console.log('🧹 AuthProvider: Отписываемся от событий');
+      subscription.unsubscribe();
+    };
+  }, [router, createProfileIfNotExists, isInitialized, pathname]);
 
   const signIn = async (email: string, password: string): Promise<SignInResponse> => {
+    console.log('🔑 AuthProvider: Попытка входа для', email);
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (data?.user && !error) {
+      console.log('✅ AuthProvider: Успешный вход');
       await createProfileIfNotExists(data.user);
+    } else if (error) {
+      console.error('❌ AuthProvider: Ошибка входа:', error);
     }
 
     return { data, error };
   };
 
   const signUp = async (email: string, password: string, name: string): Promise<SignUpResponse> => {
-    // Регистрируем пользователя
+    console.log('📝 AuthProvider: Регистрация для', email);
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -136,8 +165,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           });
+        console.log('✅ AuthProvider: Профиль создан');
       } catch (profileErr) {
-        console.error('Ошибка создания профиля:', profileErr);
+        console.error('❌ AuthProvider: Ошибка создания профиля:', profileErr);
       }
     }
 
@@ -145,8 +175,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    console.log('🚪 AuthProvider: Выход пользователя');
     await supabase.auth.signOut();
-    router.push('/');
+    // Не перенаправляем здесь, onAuthStateChange обработает
   };
 
   return (
