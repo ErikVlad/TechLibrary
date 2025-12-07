@@ -14,14 +14,15 @@ export default function LiteraturePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [isFilterInitialized, setIsFilterInitialized] = useState(false);
   const booksPerPage = 12;
   
-  // Реф для отслеживания, была ли уже инициализация фильтров
-  const hasInitializedRef = useRef(false);
+  // Рефы для контроля инициализации
+  const hasLoadedBooksRef = useRef(false);
+  const hasAppliedFiltersRef = useRef(false);
+  const initialFiltersRef = useRef<Filters | null>(null);
 
-  // Функция для получения фильтров из URL
-  const getFiltersFromURL = (): Filters => {
+  // Функция для получения фильтров из URL (один раз при загрузке)
+  const getInitialFilters = useCallback((): Filters => {
     if (typeof window === 'undefined') {
       return {
         search: '',
@@ -44,15 +45,18 @@ export default function LiteraturePage() {
       yearFrom: searchParams.get('yearFrom') || '',
       yearTo: searchParams.get('yearTo') || '',
     };
-  };
+  }, []);
 
   // Функция фильтрации книг
   const filterBooks = useCallback((booksList: Book[], filters: Filters): Book[] => {
     if (!booksList || booksList.length === 0) return [];
     
+    console.log('Применяем фильтры:', filters);
+    console.log('Книг до фильтрации:', booksList.length);
+    
     let filtered = [...booksList];
 
-    // Поиск по названию, автору и описанию
+    // Поиск
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
       filtered = filtered.filter(book => 
@@ -60,30 +64,34 @@ export default function LiteraturePage() {
         (book.author && book.author.toLowerCase().includes(searchLower)) ||
         (book.description && book.description.toLowerCase().includes(searchLower))
       );
+      console.log('После поиска:', filtered.length);
     }
 
-    // Фильтр по категориям
+    // Категории
     if (filters.categories && filters.categories.length > 0) {
       filtered = filtered.filter(book => 
         book.category && filters.categories.includes(book.category)
       );
+      console.log('После категорий:', filtered.length);
     }
 
-    // Фильтр по авторам
+    // Авторы
     if (filters.authors && filters.authors.length > 0) {
       filtered = filtered.filter(book => 
         book.author && filters.authors.includes(book.author)
       );
+      console.log('После авторов:', filtered.length);
     }
 
-    // Фильтр по тегам
+    // Теги
     if (filters.tags && filters.tags.length > 0) {
       filtered = filtered.filter(book => 
         book.tags && book.tags.some(tag => filters.tags.includes(tag))
       );
+      console.log('После тегов:', filtered.length);
     }
 
-    // Фильтр по году
+    // Год
     if (filters.year && filters.year !== 'all') {
       switch (filters.year) {
         case '2025':
@@ -99,14 +107,16 @@ export default function LiteraturePage() {
           filtered = filtered.filter(book => book.year < 2021);
           break;
       }
+      console.log('После года:', filtered.length);
     }
 
-    // Фильтр по диапазону лет
+    // Диапазон лет
     if (filters.yearFrom) {
       const yearFromNum = parseInt(filters.yearFrom);
       if (!isNaN(yearFromNum)) {
         filtered = filtered.filter(book => book.year && book.year >= yearFromNum);
       }
+      console.log('После yearFrom:', filtered.length);
     }
     
     if (filters.yearTo) {
@@ -114,11 +124,14 @@ export default function LiteraturePage() {
       if (!isNaN(yearToNum)) {
         filtered = filtered.filter(book => book.year && book.year <= yearToNum);
       }
+      console.log('После yearTo:', filtered.length);
     }
 
+    console.log('Книг после фильтрации:', filtered.length);
     return filtered;
   }, []);
 
+  // Загрузка книг
   const loadBooks = useCallback(async () => {
     try {
       setLoading(true);
@@ -136,13 +149,13 @@ export default function LiteraturePage() {
         throw new Error(`Ошибка Supabase: ${supabaseError.message}`);
       }
 
-      console.log('Данные получены из Supabase:', data);
+      console.log('Данные получены:', data?.length || 0, 'книг');
       
       if (!data || data.length === 0) {
         console.log('В базе данных нет книг');
         setBooks([]);
         setFilteredBooks([]);
-        setError('В базе данных пока нет книг. Добавьте книги через админ-панель Supabase.');
+        setError('В базе данных пока нет книг.');
       } else {
         const booksData: Book[] = data.map(book => ({
           id: book.id,
@@ -158,55 +171,56 @@ export default function LiteraturePage() {
           updated_at: book.updated_at
         }));
         
-        console.log('Загружено книг:', booksData.length);
+        console.log('Преобразовано книг:', booksData.length);
         setBooks(booksData);
         
-        // НЕМЕДЛЕННО применяем фильтры из URL
-        const urlFilters = getFiltersFromURL();
-        console.log('Фильтры из URL:', urlFilters);
+        // Сохраняем книги как загруженные
+        hasLoadedBooksRef.current = true;
         
-        const filtered = filterBooks(booksData, urlFilters);
-        console.log('Отфильтровано книг:', filtered.length);
-        setFilteredBooks(filtered);
-        
-        // Помечаем, что фильтры инициализированы
-        if (!hasInitializedRef.current) {
-          hasInitializedRef.current = true;
-          setIsFilterInitialized(true);
+        // Если еще не применяли фильтры, применяем начальные
+        if (!hasAppliedFiltersRef.current) {
+          const initialFilters = getInitialFilters();
+          console.log('Применяем начальные фильтры из URL:', initialFilters);
+          
+          const filtered = filterBooks(booksData, initialFilters);
+          console.log('Результат фильтрации:', filtered.length, 'книг');
+          
+          setFilteredBooks(filtered);
+          hasAppliedFiltersRef.current = true;
         }
       }
     } catch (error) {
-      console.error('Error loading books from Supabase:', error);
+      console.error('Error loading books:', error);
       const err = error as Error;
-      setError(`Не удалось загрузить книги из базы данных: ${err.message}`);
+      setError(`Не удалось загрузить книги: ${err.message}`);
       setBooks([]);
       setFilteredBooks([]);
     } finally {
       setLoading(false);
     }
-  }, [filterBooks]);
+  }, [getInitialFilters, filterBooks]);
 
   // Загружаем книги при монтировании
   useEffect(() => {
     loadBooks();
   }, [loadBooks]);
 
-  // Также слушаем изменения URL для обновления фильтров
-  useEffect(() => {
-    if (books.length > 0) {
-      const urlFilters = getFiltersFromURL();
-      const filtered = filterBooks(books, urlFilters);
-      setFilteredBooks(filtered);
-      setCurrentPage(1);
+  // Обработчик изменения фильтров от FiltersSidebar
+  const handleFilterChange = useCallback((filters: Filters) => {
+    console.log('Получены новые фильтры от FiltersSidebar:', filters);
+    
+    if (!hasLoadedBooksRef.current) {
+      console.log('Книги еще не загружены, откладываем фильтрацию');
+      return;
     }
-  }, [books, filterBooks, isFilterInitialized]);
-
-  // Обработчик изменения фильтров от компонента FiltersSidebar
-  const handleFilterChange = (filters: Filters) => {
+    
     const filtered = filterBooks(books, filters);
+    console.log('Фильтрация книг:', books.length, '->', filtered.length);
+    
     setFilteredBooks(filtered);
-    setCurrentPage(1);
-  };
+    setCurrentPage(1); // Сбрасываем на первую страницу
+    hasAppliedFiltersRef.current = true;
+  }, [books, filterBooks]);
 
   const handleBookSelect = (book: Book) => {
     if (book.pdf_url && book.pdf_url !== '#') {
@@ -229,6 +243,14 @@ export default function LiteraturePage() {
     }
   }, [filteredBooks, currentPage, totalPages]);
 
+  console.log('Текущее состояние:', {
+    loading,
+    booksCount: books.length,
+    filteredCount: filteredBooks.length,
+    currentPage,
+    totalPages
+  });
+
   return (
     <SidebarLayout
       filters={
@@ -244,7 +266,6 @@ export default function LiteraturePage() {
             <h1>Каталог технической литературы</h1>
             <p className={styles.booksCount}>
               Показано <span>{filteredBooks.length}</span> из <span>{books.length}</span> книг
-              {error && ' (из базы данных)'}
             </p>
           </div>
           <button 
@@ -266,14 +287,6 @@ export default function LiteraturePage() {
               <button onClick={loadBooks} className={styles.retryBtn}>
                 Попробовать снова
               </button>
-              <a 
-                href="https://supabase.com/dashboard" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className={styles.supabaseLink}
-              >
-                Открыть Supabase
-              </a>
             </div>
           </div>
         )}
@@ -292,14 +305,28 @@ export default function LiteraturePage() {
               <button onClick={loadBooks} className={styles.retryBtn}>
                 Проверить снова
               </button>
-              <a 
-                href="https://supabase.com/dashboard" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className={styles.supabaseLink}
+            </div>
+          </div>
+        ) : filteredBooks.length === 0 ? (
+          <div className={styles.emptyState}>
+            <i className="fas fa-filter"></i>
+            <h3>Книги не найдены</h3>
+            <p>Попробуйте изменить параметры поиска или сбросить фильтры</p>
+            <div className={styles.emptyActions}>
+              <button 
+                onClick={() => handleFilterChange({
+                  search: '',
+                  categories: [],
+                  year: 'all',
+                  tags: [],
+                  authors: [],
+                  yearFrom: '',
+                  yearTo: ''
+                })}
+                className={styles.retryBtn}
               >
-                Перейти в Supabase Dashboard
-              </a>
+                Сбросить фильтры
+              </button>
             </div>
           </div>
         ) : (
