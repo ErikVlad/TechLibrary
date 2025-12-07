@@ -8,9 +8,10 @@ import styles from './FiltersSidebar.module.css';
 interface FiltersSidebarProps {
   books: Book[];
   onFilterChange: (filters: Filters) => void;
+  externalReset?: string;  // Новый пропс
 }
 
-export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebarProps) {
+export default function FiltersSidebar({ books, onFilterChange, externalReset }: FiltersSidebarProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   
@@ -80,18 +81,8 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
     }
   }, [search, selectedCategories, selectedYear, selectedTags, selectedAuthors, yearFrom, yearTo]);
 
-  // Ключевое исправление: сбрасываем фильтры при изменении набора книг (например, после авторизации)
-  const prevBooksHashRef = useRef(booksHash);
-  useEffect(() => {
-    // Если набор книг изменился (новый пользователь) и компонент уже инициализирован
-    if (isInitialized && prevBooksHashRef.current !== booksHash) {
-      clearFilters();
-      prevBooksHashRef.current = booksHash;
-    }
-  }, [booksHash, isInitialized]);
-
   // Очистка фильтров
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setSearch('');
     setSelectedCategories([]);
     setSelectedYear('all');
@@ -102,7 +93,19 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
     
     // Очищаем URL
     router.replace(window.location.pathname, { scroll: false });
-  };
+  }, [router]);
+
+  // Сброс фильтров при изменении набора книг или externalReset
+  const prevResetRef = useRef({ booksHash, externalReset });
+  useEffect(() => {
+    // Если компонент уже инициализирован и (набор книг изменился или externalReset изменился)
+    if (isInitialized && 
+        (prevResetRef.current.booksHash !== booksHash || 
+         prevResetRef.current.externalReset !== externalReset)) {
+      clearFilters();
+      prevResetRef.current = { booksHash, externalReset };
+    }
+  }, [booksHash, externalReset, isInitialized, clearFilters]);
 
   const handleCategoryToggle = (category: string) => {
     setSelectedCategories(prev => 
