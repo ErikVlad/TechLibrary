@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Book, Filters } from '@/lib/types';
 import { useSearchParams, useRouter } from 'next/navigation';
 import styles from './FiltersSidebar.module.css';
@@ -34,6 +34,9 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
   const categories = Array.from(new Set(books.map(book => book.category)));
   const tags = Array.from(new Set(books.flatMap(book => book.tags))).slice(0, 10);
   const authors = Array.from(new Set(books.map(book => book.author)));
+
+  // Создаем уникальный идентификатор набора книг для отслеживания изменений
+  const booksHash = books.map(b => b.id).sort().join(',');
 
   // Функция для применения фильтров с обновлением URL
   const applyFilters = useCallback(() => {
@@ -76,6 +79,16 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
       applyFilters();
     }
   }, [search, selectedCategories, selectedYear, selectedTags, selectedAuthors, yearFrom, yearTo]);
+
+  // Ключевое исправление: сбрасываем фильтры при изменении набора книг (например, после авторизации)
+  const prevBooksHashRef = useRef(booksHash);
+  useEffect(() => {
+    // Если набор книг изменился (новый пользователь) и компонент уже инициализирован
+    if (isInitialized && prevBooksHashRef.current !== booksHash) {
+      clearFilters();
+      prevBooksHashRef.current = booksHash;
+    }
+  }, [booksHash, isInitialized]);
 
   // Очистка фильтров
   const clearFilters = () => {
