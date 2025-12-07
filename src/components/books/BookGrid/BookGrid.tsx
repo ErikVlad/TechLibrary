@@ -10,7 +10,7 @@ interface BookGridProps {
 }
 
 export default function BookGrid({ books, onBookSelect }: BookGridProps) {
-  if (books.length === 0) {
+  if (!books || books.length === 0) {
     return (
       <div className={styles.emptyState}>
         <i className="fas fa-book-open"></i>
