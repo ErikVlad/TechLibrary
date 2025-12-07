@@ -6,26 +6,13 @@ import BookCard from './BookCard/BookCard';
 import styles from './BookGrid.module.css';
 
 interface ClientBookGridProps {
-  initialBooks: Book[];
+  books: Book[]; // Изменено: принимает уже отфильтрованные книги
+  onBookSelect: (book: Book) => void; // Добавлено: пропс для выбора книги
 }
 
-export default function ClientBookGrid({ initialBooks }: ClientBookGridProps) {
-  const [books] = useState(initialBooks);
+export default function ClientBookGrid({ books, onBookSelect }: ClientBookGridProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const booksPerPage = 12;
-
-  const handleBookSelect = (book: Book) => {
-    if (book.pdf_url) {
-      window.open(book.pdf_url, '_blank');
-    } else {
-      console.error('PDF URL не найден');
-    }
-  };
-
-  const totalPages = Math.ceil(books.length / booksPerPage);
-  const startIndex = (currentPage - 1) * booksPerPage;
-  const endIndex = startIndex + booksPerPage;
-  const currentBooks = books.slice(startIndex, endIndex);
 
   if (!books || books.length === 0) {
     return (
@@ -37,6 +24,16 @@ export default function ClientBookGrid({ initialBooks }: ClientBookGridProps) {
     );
   }
 
+  const totalPages = Math.ceil(books.length / booksPerPage);
+  const startIndex = (currentPage - 1) * booksPerPage;
+  const endIndex = startIndex + booksPerPage;
+  const currentBooks = books.slice(startIndex, endIndex);
+
+  // Сбрасываем на первую страницу при изменении фильтров
+  if (currentPage > totalPages && totalPages > 0) {
+    setCurrentPage(1);
+  }
+
   return (
     <>
       <div className={styles.booksGrid}>
@@ -44,7 +41,7 @@ export default function ClientBookGrid({ initialBooks }: ClientBookGridProps) {
           <BookCard
             key={book.id}
             book={book}
-            onRead={handleBookSelect}
+            onRead={onBookSelect}
           />
         ))}
       </div>
