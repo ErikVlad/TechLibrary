@@ -14,7 +14,7 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
   const searchParams = useSearchParams();
   const router = useRouter();
   
-  // Состояния фильтров
+  // Инициализируем состояния из URL
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [selectedCategories, setSelectedCategories] = useState<string[]>(
     searchParams.get('categories')?.split(',').filter(Boolean) || []
@@ -29,11 +29,8 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
   const [yearFrom, setYearFrom] = useState(searchParams.get('yearFrom') || '');
   const [yearTo, setYearTo] = useState(searchParams.get('yearTo') || '');
   
-  // Вспомогательные состояния
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
-  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Функция для форматирования категории с заглавной буквы
   const formatCategory = (category: string): string => {
     if (!category) return '';
     const trimmed = category.trim();
@@ -48,7 +45,6 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
       .join(' ');
   };
 
-  // Получаем и форматируем категории
   const categories = Array.from(
     new Set(
       books
@@ -61,7 +57,7 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
   const tags = Array.from(new Set(books.flatMap(book => book.tags || []))).slice(0, 10);
   const authors = Array.from(new Set(books.map(book => book.author).filter(Boolean)));
 
-  // Функция применения фильтров
+  // Функция применения фильтров (без автоматического вызова)
   const applyFilters = useCallback(() => {
     const filters: Filters = {
       search,
@@ -90,20 +86,11 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
     onFilterChange(filters);
   }, [search, selectedCategories, selectedYear, selectedTags, selectedAuthors, yearFrom, yearTo, router, onFilterChange]);
 
-  // Применяем фильтры при изменении параметров
-  useEffect(() => {
-    // Если книги загружены и компонент еще не инициализирован
-    if (!isInitialized && books.length > 0) {
-      setIsInitialized(true);
-      // Применяем фильтры из URL сразу при инициализации
-      applyFilters();
-    } else if (isInitialized) {
-      // Применяем фильтры при изменении параметров
-      applyFilters();
-    }
-  }, [search, selectedCategories, selectedYear, selectedTags, selectedAuthors, yearFrom, yearTo, applyFilters, isInitialized, books.length]);
+  // Применяем фильтры ТОЛЬКО при ручном изменении
+  const handleApplyFilters = () => {
+    applyFilters();
+  };
 
-  // Очистка фильтров
   const clearFilters = () => {
     setSearch('');
     setSelectedCategories([]);
@@ -112,9 +99,22 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
     setSelectedAuthors([]);
     setYearFrom('');
     setYearTo('');
+    
+    // Очищаем URL
+    router.replace(window.location.pathname, { scroll: false });
+    
+    // Немедленно применяем пустые фильтры
+    onFilterChange({
+      search: '',
+      categories: [],
+      year: 'all',
+      tags: [],
+      authors: [],
+      yearFrom: '',
+      yearTo: ''
+    });
   };
 
-  // Обработчики изменения фильтров
   const handleCategoryToggle = (category: string) => {
     setSelectedCategories(prev => 
       prev.includes(category) 
@@ -139,14 +139,11 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
     );
   };
 
-  // Дебаунс для поиска
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     
-    // Сбрасываем предыдущий таймаут
     if (searchTimeout) clearTimeout(searchTimeout);
     
-    // Устанавливаем новый таймаут
     const timeout = setTimeout(() => {
       setSearch(value);
     }, 300);
@@ -154,7 +151,6 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
     setSearchTimeout(timeout);
   };
 
-  // Очистка таймаута при размонтировании
   useEffect(() => {
     return () => {
       if (searchTimeout) clearTimeout(searchTimeout);
@@ -165,11 +161,7 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
     <div className={styles.filtersSidebar}>
       <div className={styles.filtersHeader}>
         <h2>Фильтры</h2>
-        <button 
-          className={styles.clearFilters} 
-          onClick={clearFilters}
-          title="Сбросить все фильтры"
-        >
+        <button className={styles.clearFilters} onClick={clearFilters}>
           <i className="fas fa-times"></i> Сбросить
         </button>
       </div>
@@ -181,7 +173,6 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
           placeholder="Поиск книг..."
           value={search}
           onChange={handleSearchChange}
-          aria-label="Поиск книг"
         />
       </div>
 
@@ -199,7 +190,6 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
                   id={`cat-${category}`}
                   checked={selectedCategories.includes(category)}
                   onChange={() => handleCategoryToggle(category)}
-                  aria-label={`Категория: ${category}`}
                 />
                 <label htmlFor={`cat-${category}`}>{category}</label>
               </div>
@@ -221,7 +211,6 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
               name="year"
               checked={selectedYear === 'all'}
               onChange={() => setSelectedYear('all')}
-              aria-label="Все года"
             />
             <label htmlFor="year-all">Все года</label>
           </div>
@@ -232,7 +221,6 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
               name="year"
               checked={selectedYear === '2025'}
               onChange={() => setSelectedYear('2025')}
-              aria-label="2025 год"
             />
             <label htmlFor="year-2025">2025</label>
           </div>
@@ -243,7 +231,6 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
               name="year"
               checked={selectedYear === '2024'}
               onChange={() => setSelectedYear('2024')}
-              aria-label="2024 год"
             />
             <label htmlFor="year-2024">2024</label>
           </div>
@@ -254,7 +241,6 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
               name="year"
               checked={selectedYear === '2023-2021'}
               onChange={() => setSelectedYear('2023-2021')}
-              aria-label="2023-2021 года"
             />
             <label htmlFor="year-2023">2023-2021</label>
           </div>
@@ -265,7 +251,6 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
               name="year"
               checked={selectedYear === 'old'}
               onChange={() => setSelectedYear('old')}
-              aria-label="До 2021 года"
             />
             <label htmlFor="year-old">До 2021</label>
           </div>
@@ -279,7 +264,6 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
             onChange={(e) => setYearFrom(e.target.value)}
             min="1900"
             max="2100"
-            aria-label="Год от"
           />
           <span>—</span>
           <input
@@ -289,7 +273,6 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
             onChange={(e) => setYearTo(e.target.value)}
             min="1900"
             max="2100"
-            aria-label="Год до"
           />
         </div>
       </div>
@@ -308,7 +291,6 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
                   id={`author-${author}`}
                   checked={selectedAuthors.includes(author)}
                   onChange={() => handleAuthorToggle(author)}
-                  aria-label={`Автор: ${author}`}
                 />
                 <label htmlFor={`author-${author}`}>{author}</label>
               </div>
@@ -334,15 +316,6 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
                 key={tag}
                 className={`${styles.tag} ${selectedTags.includes(tag) ? styles.active : ''}`}
                 onClick={() => handleTagToggle(tag)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    handleTagToggle(tag);
-                  }
-                }}
-                aria-label={`Тег: ${tag}`}
-                aria-pressed={selectedTags.includes(tag)}
               >
                 {tag}
               </span>
@@ -351,11 +324,7 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
         </div>
       )}
 
-      <button 
-        className={styles.applyButton} 
-        onClick={applyFilters}
-        aria-label="Применить фильтры"
-      >
+      <button className={styles.applyButton} onClick={handleApplyFilters}>
         <i className="fas fa-filter"></i> Применить фильтры
       </button>
     </div>
