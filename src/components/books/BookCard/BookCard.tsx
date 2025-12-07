@@ -2,8 +2,9 @@
 
 import { Book } from '@/lib/types';
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/components/providers/AuthProvider';
+// Временно закомментируем все импорты кроме необходимых
+// import { supabase } from '@/lib/supabase';
+// import { useAuth } from '@/components/providers/AuthProvider';
 import styles from './BookCard.module.css';
 
 interface BookCardProps {
@@ -12,115 +13,22 @@ interface BookCardProps {
 }
 
 export default function BookCard({ book, onRead }: BookCardProps) {
-  //const { user } = useAuth();
+  // Временно отключаем
+  // const { user } = useAuth();
   const user = null;
-  const [isFavorite, setIsFavorite] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [favoriteId, setFavoriteId] = useState<string | null>(null);
-
-  const checkIfFavorite = useCallback(async () => {
-    if (!user || !book.id) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from('favorites')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('book_id', book.id)
-        .maybeSingle();
-      
-      if (error) {
-        console.error('Ошибка проверки избранного:', error);
-        return;
-      }
-      
-      if (data) {
-        setIsFavorite(true);
-        setFavoriteId(data.id);
-      } else {
-        setIsFavorite(false);
-        setFavoriteId(null);
-      }
-    } catch (error) {
-      console.error('Ошибка проверки избранного:', error);
-    }
-  }, [user, book.id]);
-
-  useEffect(() => {
-    if (user && book.id) {
-      checkIfFavorite();
-    }
-  }, [user, book.id, checkIfFavorite]);
-
-  const handleFavoriteClick = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    
-    if (!user) {
-      alert('Войдите в аккаунт, чтобы добавлять книги в избранное');
-      return;
-    }
-    
-    setIsLoading(true);
-    
-    try {
-      if (isFavorite && favoriteId) {
-        const { error } = await supabase
-          .from('favorites')
-          .delete()
-          .eq('id', favoriteId);
-        
-        if (error) throw error;
-        
-        setIsFavorite(false);
-        setFavoriteId(null);
-      } else {
-        const { data, error } = await supabase
-          .from('favorites')
-          .insert({
-            user_id: user.id,
-            book_id: book.id,
-            book_title: book.title,
-            book_author: book.author,
-            book_category: book.category || 'Не указано',
-            book_year: book.year,
-            book_pages: book.pages,
-            book_description: book.description,
-            book_tags: book.tags
-          })
-          .select()
-          .single();
-        
-        if (error) {
-          if (error.code === '23505') {
-            await checkIfFavorite();
-          } else {
-            throw error;
-          }
-        } else if (data) {
-          setIsFavorite(true);
-          setFavoriteId(data.id);
-        }
-      }
-    } catch (error) {
-      console.error('Ошибка избранного:', error);
-      const err = error as Error;
-      alert(err.message || 'Произошла ошибка');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleInfoClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    console.log('Book info:', book);
-  };
+  
+  const [isFavorite] = useState(false);
+  const [isLoading] = useState(false);
 
   const handleReadClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onRead(book);
   };
 
-  const canAddToFavorites = user && book.id;
+  const handleInfoClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    console.log('Book info:', book);
+  };
 
   return (
     <div className={styles.bookCard}>
@@ -166,33 +74,16 @@ export default function BookCard({ book, onRead }: BookCardProps) {
             <i className="fas fa-info-circle"></i>
           </button>
           
-          {canAddToFavorites ? (
-            <button 
-              className={`${styles.btnOutline} ${isFavorite ? styles.favoriteActive : ''}`} 
-              onClick={handleFavoriteClick}
-              disabled={isLoading}
-              title={isFavorite ? 'Удалить из избранного' : 'Добавить в избранное'}
-            >
-              {isLoading ? (
-                <i className="fas fa-spinner fa-spin"></i>
-              ) : isFavorite ? (
-                <i className="fas fa-heart"></i>
-              ) : (
-                <i className="far fa-heart"></i>
-              )}
-            </button>
-          ) : (
-            <button 
-              className={styles.btnOutline}
-              onClick={(e) => {
-                e.stopPropagation();
-                alert('Войдите в аккаунт, чтобы добавлять книги в избранное');
-              }}
-              title="Войдите, чтобы добавить в избранное"
-            >
-              <i className="far fa-heart"></i>
-            </button>
-          )}
+          <button 
+            className={styles.btnOutline}
+            onClick={(e) => {
+              e.stopPropagation();
+              alert('Функционал избранного временно отключен');
+            }}
+            title="Избранное отключено"
+          >
+            <i className="far fa-heart"></i>
+          </button>
         </div>
       </div>
     </div>
