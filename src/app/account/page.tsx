@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase/client'; // ИМПОРТ ИЗМЕНЕН
 import styles from './account.module.css';
 
 interface UserProfile {
@@ -41,19 +41,17 @@ export default function AccountPage() {
   });
   const [saving, setSaving] = useState(false);
 
-  // Функция загрузки данных пользователя
   const loadUserData = useCallback(async () => {
     if (!user) return;
     
     try {
       setLoading(true);
       
-      // Загружаем профиль с обработкой ошибок
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .maybeSingle(); // Используем maybeSingle вместо single
+        .maybeSingle();
       
       if (profileError) {
         console.error('Ошибка загрузки профиля:', profileError);
@@ -67,7 +65,6 @@ export default function AccountPage() {
           bio: profileData.bio || '',
         });
       } else {
-        // Если профиля нет в таблице profiles, используем данные из auth
         console.log('Профиль не найден в таблице profiles');
         setFormData({
           full_name: user.user_metadata?.full_name || '',
@@ -75,7 +72,6 @@ export default function AccountPage() {
         });
       }
       
-      // Загружаем избранное
       const { data: favoritesData, error: favoritesError } = await supabase
         .from('favorites')
         .select('*')
@@ -95,14 +91,12 @@ export default function AccountPage() {
     }
   }, [user]);
 
-  // Перенаправление если не авторизован
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login');
     }
   }, [user, authLoading, router]);
 
-  // Загрузка данных профиля
   useEffect(() => {
     if (user) {
       loadUserData();
@@ -123,7 +117,6 @@ export default function AccountPage() {
         formData: formData
       });
       
-      // Сначала проверяем существует ли профиль
       const { data: existingProfile, error: checkError } = await supabase
         .from('profiles')
         .select('id')
@@ -137,8 +130,6 @@ export default function AccountPage() {
       }
       
       if (existingProfile) {
-        // Профиль обновляем
-        console.log('Обновляем существующий профиль');
         result = await supabase
           .from('profiles')
           .update({
@@ -149,8 +140,6 @@ export default function AccountPage() {
           .eq('id', user.id)
           .select();
       } else {
-        // Профиля нет - создаем новый
-        console.log('Создаем новый профиль');
         result = await supabase
           .from('profiles')
           .insert({
@@ -178,7 +167,6 @@ export default function AccountPage() {
         throw error;
       }
       
-      // Обновляем локальное состояние
       setProfile(prev => prev ? {
         ...prev,
         full_name: formData.full_name,
@@ -208,7 +196,6 @@ export default function AccountPage() {
       
       if (error) throw error;
       
-      // Обновляем список
       setFavorites(prev => prev.filter(fav => fav.id !== favoriteId));
       alert('✅ Книга удалена из избранного');
       
@@ -237,13 +224,12 @@ export default function AccountPage() {
   }
 
   if (!user) {
-    return null; // Будет перенаправление
+    return null;
   }
 
   return (
     <div className={styles.accountContainer}>
       <div className={styles.accountCard}>
-        {/* Хедер профиля */}
         <div className={styles.profileHeader}>
           <div className={styles.avatarSection}>
             <div className={styles.avatar}>
@@ -281,7 +267,6 @@ export default function AccountPage() {
           </div>
         </div>
 
-        {/* Навигация по табам */}
         <div className={styles.tabs}>
           <button 
             className={`${styles.tab} ${activeTab === 'profile' ? styles.active : ''}`}
@@ -306,7 +291,6 @@ export default function AccountPage() {
           </button>
         </div>
 
-        {/* Контент табов */}
         <div className={styles.tabContent}>
           {activeTab === 'profile' && (
             <div className={styles.profileContent}>
