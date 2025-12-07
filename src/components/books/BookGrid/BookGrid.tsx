@@ -10,12 +10,14 @@ interface BookGridProps {
 }
 
 export default function BookGrid({ books, onBookSelect }: BookGridProps) {
+  console.log('📚 BookGrid: Рендер, книг:', books.length);
+  
   if (!books || books.length === 0) {
     return (
       <div className={styles.emptyState}>
         <i className="fas fa-book-open"></i>
         <h3>Книги не найдены</h3>
-        <p>Попробуйте изменить параметры поиска или фильтры</p>
+        <p>Нет доступных книг для отображения</p>
       </div>
     );
   }
