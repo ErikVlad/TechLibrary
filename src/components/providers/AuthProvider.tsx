@@ -1,4 +1,3 @@
-// components/providers/AuthProvider.tsx
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -33,7 +32,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Функция для создания профиля если его нет (объявляем ДО использования)
   const createProfileIfNotExists = useCallback(async (user: User) => {
     try {
       const { data: existingProfile } = await supabase
@@ -88,6 +86,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         
         if (event === 'SIGNED_OUT') {
+          // Очищаем localStorage при выходе
+          localStorage.removeItem('sb-auth-token');
+          localStorage.removeItem('supabase.auth.token');
           router.push('/');
         }
         
@@ -112,7 +113,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, name: string): Promise<SignUpResponse> => {
-    // Регистрируем пользователя
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -120,11 +120,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         data: {
           full_name: name,
         },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined,
       }
     });
 
-    // Создаем профиль даже если email не подтвержден
     if (data?.user && !error) {
       try {
         await supabase
@@ -145,8 +144,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    router.push('/');
+    try {
+      // Используем scope: 'local' для предотвращения 403 ошибки
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      
+      if (error) {
+        console.error('Ошибка при выходе:', error);
+        // Если стандартный выход не работает, очищаем вручную
+        localStorage.removeItem('sb-auth-token');
+        localStorage.removeItem('supabase.auth.token');
+        sessionStorage.removeItem('sb-auth-token');
+        sessionStorage.removeItem('supabase.auth.token');
+      }
+      
+      // В любом случае сбрасываем состояние
+      setUser(null);
+      setSession(null);
+      
+    } catch (err) {
+      console.error('Критическая ошибка при выходе:', err);
+      // Принудительная очистка
+      localStorage.removeItem('sb-auth-token');
+      localStorage.removeItem('supabase.auth.token');
+      sessionStorage.removeItem('sb-auth-token');
+      sessionStorage.removeItem('supabase.auth.token');
+    }
   };
 
   return (
