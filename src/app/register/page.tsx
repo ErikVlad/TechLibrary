@@ -1,17 +1,14 @@
-// app/register/page.tsx
 'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { supabase } from '@/lib/supabase/client';
-import { AuthError } from '@supabase/supabase-js';
 import styles from './auth.module.css';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { signUp, signOut } = useAuth();
+  const { signUp } = useAuth();
   
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -34,6 +31,11 @@ export default function RegisterPage() {
       return;
     }
     
+    if (!name.trim()) {
+      setError('Введите ваше имя');
+      return;
+    }
+    
     setLoading(true);
     setError('');
     setSuccess('');
@@ -45,17 +47,21 @@ export default function RegisterPage() {
       if (error) {
         setError(error.message);
       } else if (data?.user) {
-        // После успешной регистрации выходим, чтобы пользователь не был автоматически залогинен
-        await supabase.auth.signOut();
-        
         setSuccess('Регистрация успешна! Проверьте вашу почту для подтверждения аккаунта.');
+        
+        // Очищаем форму
+        setName('');
+        setEmail('');
+        setPassword('');
+        setConfirmPassword('');
+        
+        // Перенаправляем на логин через 3 секунды
         setTimeout(() => {
           router.push('/login');
         }, 3000);
       }
-    } catch (err) {
-      const authError = err as AuthError;
-      setError(authError.message || 'Ошибка регистрации');
+    } catch (err: any) {
+      setError(err.message || 'Ошибка регистрации');
     } finally {
       setLoading(false);
     }
@@ -93,7 +99,7 @@ export default function RegisterPage() {
               required
               disabled={loading}
             />
-            <p className={styles.helpText}>Это имя будет отображаться в вашем профиле</p>
+            <p className={styles.helpText}>Это имя будет отображаться в правом верхнем углу и в приветствиях</p>
           </div>
           
           <div className={styles.formGroup}>
@@ -145,7 +151,9 @@ export default function RegisterPage() {
                 <i className="fas fa-spinner fa-spin"></i> Регистрация...
               </>
             ) : (
-              'Зарегистрироваться'
+              <>
+                <i className="fas fa-user-plus"></i> Зарегистрироваться
+              </>
             )}
           </button>
         </form>
