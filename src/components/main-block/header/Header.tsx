@@ -43,31 +43,29 @@ export default function Header() {
   };
 
   const handleMouseLeave = () => {
-    // Задержка 500ms перед закрытием (увеличенная задержка)
+    // Задержка перед закрытием
     timeoutRef.current = setTimeout(() => {
       setDropdownOpen(false);
-    }, 500);
+    }, 300);
   };
 
   const handleLogout = async () => {
     try {
-      // Сбрасываем состояние сразу
+      // Сбрасываем состояние
       setDropdownOpen(false);
       
-      // Пробуем стандартный выход
-      await signOut();
+      // Даем небольшую задержку для UX
+      await new Promise(resolve => setTimeout(resolve, 100));
       
-      // На всякий случай очищаем localStorage
-      localStorage.removeItem('sb-auth-token');
-      localStorage.removeItem('supabase.auth.token');
+      // Вызываем выход
+      await signOut();
       
       // Перенаправляем на главную
       window.location.href = '/';
+      
     } catch (error) {
       console.error('Ошибка при выходе:', error);
-      // Принудительная перезагрузка при ошибке
-      localStorage.removeItem('sb-auth-token');
-      localStorage.removeItem('supabase.auth.token');
+      // Принудительная перезагрузка
       window.location.href = '/';
     }
   };
@@ -128,7 +126,11 @@ export default function Header() {
             </div>
           )}
 
-          <button className={styles.themeToggle} onClick={toggleTheme}>
+          <button 
+            className={styles.themeToggle} 
+            onClick={toggleTheme}
+            aria-label={theme === 'light' ? 'Переключить на темную тему' : 'Переключить на светлую тему'}
+          >
             <i className={theme === 'light' ? 'fas fa-moon' : 'fas fa-sun'}></i>
           </button>
         </div>
