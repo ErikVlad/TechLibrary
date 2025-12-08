@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase/client'; // ЕДИНСТВЕННОЕ ИЗМЕНЕНИЕ
+import { supabase } from '@/lib/supabase/client'; 
 import { Book } from '@/lib/types';
 
 export default function BookDetailPage() {
