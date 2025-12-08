@@ -15,6 +15,7 @@ export default function HomePage() {
   const [filteredBooks, setFilteredBooks] = useState<Book[]>([]);
   const [loadingBooks, setLoadingBooks] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [userName, setUserName] = useState<string>('');
   const booksPerPage = 12;
   const router = useRouter();
   
@@ -23,6 +24,46 @@ export default function HomePage() {
 
   // Флаг для отслеживания монтирования компонента
   const isMounted = useRef(true);
+
+  // Загружаем имя пользователя из профиля
+  useEffect(() => {
+    const loadUserName = async () => {
+      if (user) {
+        try {
+          // Пробуем получить имя из профиля в таблице profiles
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, username')
+            .eq('id', user.id)
+            .single();
+          
+          // Получаем имя в порядке приоритета:
+          const name = 
+            profile?.full_name || 
+            profile?.username || 
+            user.user_metadata?.full_name ||
+            user.user_metadata?.name || 
+            user.email?.split('@')[0] || 
+            'Пользователь';
+          
+          setUserName(name);
+        } catch (error) {
+          console.error('Ошибка загрузки имени:', error);
+          // Если ошибка, используем данные из метаданных
+          const fallbackName = 
+            user.user_metadata?.full_name ||
+            user.user_metadata?.name || 
+            user.email?.split('@')[0] || 
+            'Пользователь';
+          setUserName(fallbackName);
+        }
+      } else {
+        setUserName('');
+      }
+    };
+
+    loadUserName();
+  }, [user]);
 
   // Функция загрузки книг
   const loadBooks = useCallback(async () => {
@@ -269,9 +310,11 @@ export default function HomePage() {
           <div>
             <h1>Каталог технической литературы</h1>
             <p className={styles.booksCount}>
-              {user && <span style={{ color: 'var(--accent)', marginRight: '10px' }}>
-                👋 Привет, {user.email}
-              </span>}
+              {user && userName && (
+                <span style={{ color: 'var(--accent)', marginRight: '10px' }}>
+                  👋 Привет, {userName}
+                </span>
+              )}
               Показано <span>{filteredBooks.length}</span> из <span>{books.length}</span> книг
             </p>
           </div>
