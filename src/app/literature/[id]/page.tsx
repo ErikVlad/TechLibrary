@@ -1,10 +1,9 @@
-// src/app/literature/[id]/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase/client'; // ЕДИНСТВЕННОЕ ИЗМЕНЕНИЕ
 import { Book } from '@/lib/types';
 
 export default function BookDetailPage() {
@@ -321,7 +320,7 @@ export default function BookDetailPage() {
           <div style={{
             width: '100%',
             height: '600px',
-            border: '1px solid #e0e0e0',
+            border: '1px solid '#e0e0e0'',
             borderRadius: '8px',
             overflow: 'hidden'
           }}>
