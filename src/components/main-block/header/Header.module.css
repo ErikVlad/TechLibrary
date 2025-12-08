@@ -3,7 +3,7 @@
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 1000; /* Увеличено для надежности */
   padding: 1rem 2rem;
   backdrop-filter: blur(10px);
 }
@@ -14,13 +14,14 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem; /* Добавлен gap для мобильных */
 }
 
 .logo {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 1.5rem;
+  font-size: clamp(1.25rem, 4vw, 1.5rem); /* Адаптивный размер шрифта */
   font-weight: 700;
   text-decoration: none;
   color: inherit;
@@ -56,6 +57,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  white-space: nowrap; /* Предотвращает перенос текста */
 }
 
 .loginBtn {
@@ -64,7 +66,8 @@
   border: 1px solid var(--border);
 }
 
-.loginBtn:hover {
+.loginBtn:hover,
+.loginBtn:focus-visible { /* Добавлен focus для доступности */
   border-color: var(--primary);
   color: var(--primary);
 }
@@ -75,7 +78,8 @@
   border: 1px solid var(--primary);
 }
 
-.registerBtn:hover {
+.registerBtn:hover,
+.registerBtn:focus-visible { /* Добавлен focus для доступности */
   background: var(--primary-dark);
   border-color: var(--primary-dark);
 }
@@ -92,12 +96,18 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  white-space: nowrap; /* Предотвращает перенос текста */
 }
 
 .userName::after {
   content: '▼';
   font-size: 0.7rem;
   margin-left: 0.25rem;
+  transition: transform 0.2s ease; /* Анимация стрелки */
+}
+
+.userMenu:hover .userName::after {
+  transform: rotate(180deg); /* Анимация при наведении */
 }
 
 .userDropdown {
@@ -109,9 +119,10 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   min-width: 200px;
-  z-index: 100;
-  margin-top: 5px;
+  z-index: 1000; /* Увеличено для надежности */
+  margin-top: 0.5rem; /* Уменьшен отступ для лучшего восприятия */
   box-shadow: var(--shadow);
+  animation: fadeIn 0.2s ease-out; /* Анимация появления */
 }
 
 .userMenu:hover .userDropdown {
@@ -134,7 +145,8 @@
   font-size: 0.9rem;
 }
 
-.dropdownItem:hover {
+.dropdownItem:hover,
+.dropdownItem:focus-visible { /* Добавлен focus для доступности */
   background: var(--card-hover);
 }
 
@@ -161,9 +173,11 @@
   transition: var(--transition);
 }
 
-.themeToggle:hover {
+.themeToggle:hover,
+.themeToggle:focus-visible { /* Добавлен focus для доступности */
   border-color: var(--primary);
   color: var(--primary);
+  outline: none; /* Убираем стандартный outline */
 }
 
 .booksCount {
@@ -176,22 +190,92 @@
   color: var(--primary);
 }
 
+/* Анимация для выпадающего меню */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Для кнопки выхода (если нужно выделить) */
+.logoutButton {
+  color: #ff4444;
+}
+
+.logoutButton:hover,
+.logoutButton:focus-visible {
+  background-color: #ff4444;
+  color: white;
+}
+
 @media (max-width: 768px) {
+  .header {
+    padding: 0.75rem 1rem; /* Уменьшен padding для мобильных */
+  }
+  
   .headerContainer {
-    flex-direction: column;
-    gap: 1rem;
-    padding: 1rem;
+    flex-direction: row; /* Оставляем row для мобильных */
+    gap: 0.5rem;
+    flex-wrap: wrap; /* Позволяем перенос элементов */
   }
   
   .headerControls {
     flex-wrap: wrap;
-    justify-content: center;
-    gap: 1rem;
+    justify-content: flex-end; /* Выравнивание по правому краю */
+    gap: 0.75rem;
   }
   
   .authButtons {
-    order: 3;
+    order: 0; /* Убираем принудительный order */
+    width: auto;
+    justify-content: flex-end;
+  }
+  
+  .loginBtn, .registerBtn {
+    padding: 0.4rem 0.75rem; /* Уменьшен padding для мобильных */
+    font-size: 0.85rem;
+  }
+  
+  .userName {
+    font-size: 0.9rem; /* Уменьшен шрифт для мобильных */
+    padding: 0.4rem;
+  }
+  
+  .userDropdown {
+    min-width: 180px; /* Уменьшена ширина для мобильных */
+    right: -0.5rem; /* Смещение для лучшего отображения */
+  }
+  
+  .themeToggle {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+@media (max-width: 480px) {
+  .headerContainer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+  
+  .headerControls {
+    justify-content: space-between;
+  }
+  
+  .authButtons {
     width: 100%;
+    justify-content: center;
+    order: 3;
+  }
+  
+  .logo {
+    text-align: center;
     justify-content: center;
   }
 }
