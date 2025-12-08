@@ -1,523 +1,229 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase/client';
 import styles from './account.module.css';
 
-interface UserProfile {
-  id: string;
-  email: string;
-  full_name: string | null;
-  avatar_url: string | null;
-  bio: string | null;
-  created_at: string;
-  updated_at?: string;
-}
-
-interface FavoriteBook {
-  id: string;
-  book_id: string;
-  book_title: string;
-  book_author: string | null;
-  book_category: string | null;
-  added_at: string;
-}
-
 export default function AccountPage() {
-  const router = useRouter();
-  const { user, signOut, loading: authLoading } = useAuth();
-  
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [favorites, setFavorites] = useState<FavoriteBook[]>([]);
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('profile');
-  const [editMode, setEditMode] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  
   const [formData, setFormData] = useState({
     full_name: '',
+    username: '',
     bio: '',
+    avatar_url: '',
   });
-  const [saving, setSaving] = useState(false);
 
-  // Функция загрузки данных пользователя
-  const loadUserData = useCallback(async () => {
-    if (!user) return;
-    
-    try {
-      setLoading(true);
-      
-      // Загружаем профиль с обработкой ошибок
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .maybeSingle(); // Используем maybeSingle вместо single
-      
-      if (profileError) {
-        console.error('Ошибка загрузки профиля:', profileError);
+  // Загружаем профиль пользователя
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (user) {
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single();
+
+          if (profile) {
+            setFormData({
+              full_name: profile.full_name || '',
+              username: profile.username || '',
+              bio: profile.bio || '',
+              avatar_url: profile.avatar_url || '',
+            });
+          }
+        } catch (error) {
+          console.error('Ошибка загрузки профиля:', error);
+        } finally {
+          setLoading(false);
+        }
       }
-      
-      if (profileData) {
-        console.log('Профиль загружен:', profileData);
-        setProfile(profileData);
-        setFormData({
-          full_name: profileData.full_name || '',
-          bio: profileData.bio || '',
-        });
-      } else {
-        // Если профиля нет в таблице profiles, используем данные из auth
-        console.log('Профиль не найден в таблице profiles');
-        setFormData({
-          full_name: user.user_metadata?.full_name || '',
-          bio: '',
-        });
-      }
-      
-      // Загружаем избранное
-      const { data: favoritesData, error: favoritesError } = await supabase
-        .from('favorites')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('added_at', { ascending: false });
-      
-      if (favoritesError) {
-        console.error('Ошибка загрузки избранного:', favoritesError);
-      } else if (favoritesData) {
-        setFavorites(favoritesData);
-      }
-      
-    } catch (error) {
-      console.error('Ошибка загрузки данных:', error);
-    } finally {
-      setLoading(false);
-    }
+    };
+
+    loadProfile();
   }, [user]);
 
-  // Перенаправление если не авторизован
-  useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login');
-    }
-  }, [user, authLoading, router]);
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
 
-  // Загрузка данных профиля
-  useEffect(() => {
-    if (user) {
-      loadUserData();
-    }
-  }, [user, loadUserData]);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
 
-  const handleSaveProfile = async () => {
-    if (!user) {
-      alert('Пользователь не авторизован');
-      return;
-    }
-    
+    setSaving(true);
+    setSuccessMessage('');
+    setErrorMessage('');
+
     try {
-      setSaving(true);
-      
-      console.log('Сохранение профиля...', {
-        userId: user.id,
-        formData: formData
-      });
-      
-      // Сначала проверяем существует ли профиль
-      const { data: existingProfile, error: checkError } = await supabase
+      // Обновляем профиль в таблице profiles
+      const { error: profileError } = await supabase
         .from('profiles')
-        .select('id')
-        .eq('id', user.id)
-        .maybeSingle();
+        .update({
+          full_name: formData.full_name,
+          username: formData.username,
+          bio: formData.bio,
+          avatar_url: formData.avatar_url,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+
+      if (profileError) throw profileError;
+
+      // Также обновляем метаданные пользователя в auth
+      const { error: authError } = await supabase.auth.updateUser({
+        data: {
+          full_name: formData.full_name,
+          name: formData.full_name,
+        }
+      });
+
+      if (authError) throw authError;
+
+      setSuccessMessage('Профиль успешно обновлен!');
       
-      let result;
-      
-      if (checkError) {
-        console.error('Ошибка проверки профиля:', checkError);
-      }
-      
-      if (existingProfile) {
-        // Профиль обновляем
-        console.log('Обновляем существующий профиль');
-        result = await supabase
-          .from('profiles')
-          .update({
-            full_name: formData.full_name || null,
-            bio: formData.bio || null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', user.id)
-          .select();
-      } else {
-        // Профиля нет - создаем новый
-        console.log('Создаем новый профиль');
-        result = await supabase
-          .from('profiles')
-          .insert({
-            id: user.id,
-            email: user.email,
-            full_name: formData.full_name || null,
-            bio: formData.bio || null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .select();
-      }
-      
-      const { data, error } = result;
-      
-      console.log('Ответ от Supabase:', { data, error });
-      
-      if (error) {
-        console.error('Детали ошибки:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
-        });
-        throw error;
-      }
-      
-      // Обновляем локальное состояние
-      setProfile(prev => prev ? {
-        ...prev,
-        full_name: formData.full_name,
-        bio: formData.bio,
-        updated_at: new Date().toISOString(),
-      } : (data ? data[0] : null));
-      
-      setEditMode(false);
-      alert('✅ Профиль успешно обновлен!');
-      
-    } catch (error) {
+      // Обновляем страницу через 2 секунды, чтобы изменения применились
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+
+    } catch (error: any) {
       console.error('Ошибка сохранения:', error);
-      alert('❌ Ошибка при сохранении профиля');
+      setErrorMessage(error.message || 'Ошибка при сохранении профиля');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleRemoveFavorite = async (favoriteId: string) => {
-    if (!confirm('Удалить из избранного?')) return;
-    
-    try {
-      const { error } = await supabase
-        .from('favorites')
-        .delete()
-        .eq('id', favoriteId);
-      
-      if (error) throw error;
-      
-      // Обновляем список
-      setFavorites(prev => prev.filter(fav => fav.id !== favoriteId));
-      alert('✅ Книга удалена из избранного');
-      
-    } catch (error) {
-      console.error('Ошибка удаления:', error);
-      alert('❌ Ошибка при удалении из избранного');
-    }
-  };
-
-  const handleLogout = async () => {
-    await signOut();
-    router.push('/');
-  };
-
-  if (authLoading || loading) {
+  if (loading) {
     return (
-      <div className={styles.accountContainer}>
-        <div className={styles.accountCard}>
-          <div className={styles.loading}>
-            <i className="fas fa-spinner fa-spin"></i>
-            <p>Загрузка профиля...</p>
-          </div>
-        </div>
+      <div className={styles.loadingContainer}>
+        <div className={styles.loadingSpinner}></div>
+        <p>Загрузка профиля...</p>
       </div>
     );
   }
 
-  if (!user) {
-    return null; // Будет перенаправление
-  }
-
   return (
-    <div className={styles.accountContainer}>
-      <div className={styles.accountCard}>
-        {/* Хедер профиля */}
-        <div className={styles.profileHeader}>
-          <div className={styles.avatarSection}>
-            <div className={styles.avatar}>
-              {profile?.full_name?.charAt(0) || user.email?.charAt(0) || 'U'}
-            </div>
-            <div className={styles.profileInfo}>
-              <h1>{profile?.full_name || formData.full_name || 'Пользователь'}</h1>
-              <p className={styles.email}>{user.email}</p>
-              <p className={styles.memberSince}>
-                Участник с {new Date(profile?.created_at || user.created_at || new Date()).toLocaleDateString('ru-RU')}
-              </p>
-              {profile?.updated_at && (
-                <p className={styles.memberSince}>
-                  Обновлено: {new Date(profile.updated_at).toLocaleDateString('ru-RU')}
-                </p>
-              )}
-            </div>
-          </div>
-          
-          <div className={styles.actions}>
-            <button 
-              className={styles.editBtn}
-              onClick={() => setEditMode(!editMode)}
-              disabled={saving}
-            >
-              <i className="fas fa-edit"></i> {editMode ? 'Отменить' : 'Редактировать'}
-            </button>
-            <button 
-              className={styles.logoutBtn}
-              onClick={handleLogout}
-              disabled={saving}
-            >
-              <i className="fas fa-sign-out-alt"></i> Выйти
-            </button>
-          </div>
+    <div className={styles.accountPage}>
+      <h1 className={styles.title}>Мой профиль</h1>
+      
+      {successMessage && (
+        <div className={styles.successMessage}>
+          <i className="fas fa-check-circle"></i> {successMessage}
+        </div>
+      )}
+      
+      {errorMessage && (
+        <div className={styles.errorMessage}>
+          <i className="fas fa-exclamation-circle"></i> {errorMessage}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className={styles.profileForm}>
+        <div className={styles.formGroup}>
+          <label htmlFor="full_name" className={styles.label}>
+            <i className="fas fa-user"></i> Полное имя
+          </label>
+          <input
+            type="text"
+            id="full_name"
+            name="full_name"
+            value={formData.full_name}
+            onChange={handleInputChange}
+            className={styles.input}
+            placeholder="Введите ваше полное имя"
+            required
+          />
+          <p className={styles.helpText}>
+            Это имя будет отображаться в правом верхнем углу и в приветствиях
+          </p>
         </div>
 
-        {/* Навигация по табам */}
-        <div className={styles.tabs}>
-          <button 
-            className={`${styles.tab} ${activeTab === 'profile' ? styles.active : ''}`}
-            onClick={() => setActiveTab('profile')}
-          >
-            <i className="fas fa-user"></i> Профиль
-          </button>
-          <button 
-            className={`${styles.tab} ${activeTab === 'favorites' ? styles.active : ''}`}
-            onClick={() => setActiveTab('favorites')}
-          >
-            <i className="fas fa-heart"></i> Избранное
-            {favorites.length > 0 && (
-              <span className={styles.badge}>{favorites.length}</span>
-            )}
-          </button>
-          <button 
-            className={`${styles.tab} ${activeTab === 'activity' ? styles.active : ''}`}
-            onClick={() => setActiveTab('activity')}
-          >
-            <i className="fas fa-history"></i> Активность
-          </button>
+        <div className={styles.formGroup}>
+          <label htmlFor="username" className={styles.label}>
+            <i className="fas fa-at"></i> Имя пользователя
+          </label>
+          <input
+            type="text"
+            id="username"
+            name="username"
+            value={formData.username}
+            onChange={handleInputChange}
+            className={styles.input}
+            placeholder="username"
+          />
         </div>
 
-        {/* Контент табов */}
-        <div className={styles.tabContent}>
-          {activeTab === 'profile' && (
-            <div className={styles.profileContent}>
-              {saving && (
-                <div className={styles.savingOverlay}>
-                  <i className="fas fa-spinner fa-spin"></i>
-                  <p>Сохранение...</p>
-                </div>
-              )}
-              
-              {editMode ? (
-                <div className={styles.editForm}>
-                  <div className={styles.formGroup}>
-                    <label>Имя</label>
-                    <input
-                      type="text"
-                      value={formData.full_name}
-                      onChange={(e) => setFormData({...formData, full_name: e.target.value})}
-                      placeholder="Ваше имя"
-                      disabled={saving}
-                    />
-                  </div>
-                  
-                  <div className={styles.formGroup}>
-                    <label>О себе</label>
-                    <textarea
-                      value={formData.bio}
-                      onChange={(e) => setFormData({...formData, bio: e.target.value})}
-                      placeholder="Расскажите о себе..."
-                      rows={4}
-                      disabled={saving}
-                    />
-                  </div>
-                  
-                  <div className={styles.formActions}>
-                    <button 
-                      className={styles.saveBtn}
-                      onClick={handleSaveProfile}
-                      disabled={saving}
-                    >
-                      {saving ? (
-                        <>
-                          <i className="fas fa-spinner fa-spin"></i> Сохранение...
-                        </>
-                      ) : (
-                        <>
-                          <i className="fas fa-save"></i> Сохранить
-                        </>
-                      )}
-                    </button>
-                    <button 
-                      className={styles.cancelBtn}
-                      onClick={() => {
-                        setEditMode(false);
-                        setFormData({
-                          full_name: profile?.full_name || '',
-                          bio: profile?.bio || '',
-                        });
-                      }}
-                      disabled={saving}
-                    >
-                      Отмена
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className={styles.profileView}>
-                  <div className={styles.infoRow}>
-                    <div className={styles.infoLabel}>
-                      <i className="fas fa-user"></i>
-                      <span>Имя:</span>
-                    </div>
-                    <div className={styles.infoValue}>
-                      {profile?.full_name || formData.full_name || 'Не указано'}
-                    </div>
-                  </div>
-                  
-                  <div className={styles.infoRow}>
-                    <div className={styles.infoLabel}>
-                      <i className="fas fa-envelope"></i>
-                      <span>Email:</span>
-                    </div>
-                    <div className={styles.infoValue}>
-                      {user.email}
-                    </div>
-                  </div>
-                  
-                  <div className={styles.infoRow}>
-                    <div className={styles.infoLabel}>
-                      <i className="fas fa-info-circle"></i>
-                      <span>О себе:</span>
-                    </div>
-                    <div className={styles.infoValue}>
-                      {profile?.bio || formData.bio || 'Не указано'}
-                    </div>
-                  </div>
-                  
-                  <div className={styles.infoRow}>
-                    <div className={styles.infoLabel}>
-                      <i className="fas fa-calendar-alt"></i>
-                      <span>Дата регистрации:</span>
-                    </div>
-                    <div className={styles.infoValue}>
-                      {new Date(profile?.created_at || user.created_at || new Date()).toLocaleDateString('ru-RU')}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'favorites' && (
-            <div className={styles.favoritesContent}>
-              {favorites.length === 0 ? (
-                <div className={styles.emptyState}>
-                  <i className="fas fa-heart"></i>
-                  <h3>Нет избранных книг</h3>
-                  <p>Добавляйте книги в избранное, чтобы они появились здесь</p>
-                  <Link href="/literature" className={styles.browseBtn}>
-                    <i className="fas fa-book"></i> Перейти к каталогу
-                  </Link>
-                </div>
-              ) : (
-                <>
-                  <div className={styles.favoritesStats}>
-                    <p>Всего в избранном: <strong>{favorites.length}</strong> книг</p>
-                  </div>
-                  
-                  <div className={styles.favoritesGrid}>
-                    {favorites.map((fav) => (
-                      <div key={fav.id} className={styles.favoriteCard}>
-                        <div className={styles.favoriteIcon}>
-                          <i className="fas fa-book"></i>
-                        </div>
-                        
-                        <div className={styles.favoriteContent}>
-                          <h4>{fav.book_title}</h4>
-                          {fav.book_author && (
-                            <p className={styles.favoriteAuthor}>
-                              <i className="fas fa-user-pen"></i> {fav.book_author}
-                            </p>
-                          )}
-                          {fav.book_category && (
-                            <p className={styles.favoriteCategory}>
-                              <i className="fas fa-tag"></i> {fav.book_category}
-                            </p>
-                          )}
-                          <p className={styles.favoriteDate}>
-                            Добавлено {new Date(fav.added_at).toLocaleDateString('ru-RU')}
-                          </p>
-                        </div>
-                        
-                        <div className={styles.favoriteActions}>
-                          <Link 
-                            href={`/literature/${fav.book_id}`}
-                            className={styles.viewBtn}
-                          >
-                            <i className="fas fa-eye"></i>
-                          </Link>
-                          <button 
-                            className={styles.removeBtn}
-                            onClick={() => handleRemoveFavorite(fav.id)}
-                            title="Удалить из избранного"
-                          >
-                            <i className="fas fa-trash"></i>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'activity' && (
-            <div className={styles.activityContent}>
-              <div className={styles.activityEmpty}>
-                <i className="fas fa-chart-line"></i>
-                <h3>Статистика активности</h3>
-                <p>Здесь будет отображаться ваша активность в библиотеке</p>
-                <div className={styles.statsGrid}>
-                  <div className={styles.statCard}>
-                    <div className={styles.statIcon}>
-                      <i className="fas fa-book-open"></i>
-                    </div>
-                    <div className={styles.statValue}>0</div>
-                    <div className={styles.statLabel}>Прочитано книг</div>
-                  </div>
-                  
-                  <div className={styles.statCard}>
-                    <div className={styles.statIcon}>
-                      <i className="fas fa-heart"></i>
-                    </div>
-                    <div className={styles.statValue}>{favorites.length}</div>
-                    <div className={styles.statLabel}>В избранном</div>
-                  </div>
-                  
-                  <div className={styles.statCard}>
-                    <div className={styles.statIcon}>
-                      <i className="fas fa-clock"></i>
-                    </div>
-                    <div className={styles.statValue}>0 ч</div>
-                    <div className={styles.statLabel}>Время чтения</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+        <div className={styles.formGroup}>
+          <label htmlFor="bio" className={styles.label}>
+            <i className="fas fa-info-circle"></i> О себе
+          </label>
+          <textarea
+            id="bio"
+            name="bio"
+            value={formData.bio}
+            onChange={handleInputChange}
+            className={styles.textarea}
+            placeholder="Расскажите о себе..."
+            rows={4}
+          />
         </div>
-      </div>
+
+        <div className={styles.formGroup}>
+          <label htmlFor="avatar_url" className={styles.label}>
+            <i className="fas fa-image"></i> Ссылка на аватар
+          </label>
+          <input
+            type="url"
+            id="avatar_url"
+            name="avatar_url"
+            value={formData.avatar_url}
+            onChange={handleInputChange}
+            className={styles.input}
+            placeholder="https://example.com/avatar.jpg"
+          />
+        </div>
+
+        <div className={styles.formGroup}>
+          <label className={styles.label}>
+            <i className="fas fa-envelope"></i> Email
+          </label>
+          <input
+            type="email"
+            value={user?.email || ''}
+            className={`${styles.input} ${styles.disabledInput}`}
+            disabled
+          />
+          <p className={styles.helpText}>Email нельзя изменить</p>
+        </div>
+
+        <button 
+          type="submit" 
+          className={styles.saveButton}
+          disabled={saving}
+        >
+          {saving ? (
+            <>
+              <i className="fas fa-spinner fa-spin"></i> Сохранение...
+            </>
+          ) : (
+            <>
+              <i className="fas fa-save"></i> Сохранить изменения
+            </>
+          )}
+        </button>
+      </form>
     </div>
   );
 }
