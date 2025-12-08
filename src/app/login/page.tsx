@@ -1,113 +1,155 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { AuthError } from '@supabase/supabase-js';
+import { useRouter } from 'next/navigation';
 import styles from './auth.module.css';
 
 export default function LoginPage() {
-  const router = useRouter();
-  const { signIn } = useAuth();
-  
+  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [fullName, setFullName] = useState(''); // Добавлено поле для имени
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const { signIn, signUp } = useAuth();
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
+    setLoading(true);
 
     try {
-      const { error } = await signIn(email, password);
-      
-      if (error) {
-        setError(error.message);
-      } else {
+      if (isLogin) {
+        const { error } = await signIn(email, password);
+        if (error) throw error;
         router.push('/');
-        router.refresh();
+      } else {
+        // При регистрации передаем имя пользователя
+        if (!fullName.trim()) {
+          throw new Error('Введите ваше имя');
+        }
+        
+        const { error } = await signUp(email, password, fullName);
+        if (error) throw error;
+        
+        // После регистрации показываем сообщение
+        alert('Регистрация успешна! Проверьте вашу почту для подтверждения.');
+        setIsLogin(true);
+        setFullName('');
       }
-    } catch (err) {
-      const authError = err as AuthError;
-      setError(authError.message || 'Ошибка входа');
+    } catch (err: any) {
+      setError(err.message || 'Произошла ошибка');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className={styles.authContainer}>
-      <div className={styles.authCard}>
-        <div className={styles.authHeader}>
-          <h1>Вход в TechLibrary</h1>
-          <p>Войдите в свой аккаунт для доступа к библиотеке</p>
-        </div>
-        
-        {error && (
-          <div className={styles.errorMessage}>
-            <i className="fas fa-exclamation-circle"></i> {error}
-          </div>
-        )}
+    <div className={styles.authPage}>
+      <div className={styles.authContainer}>
+        <h1 className={styles.authTitle}>
+          {isLogin ? 'Вход в аккаунт' : 'Создание аккаунта'}
+        </h1>
         
         <form onSubmit={handleSubmit} className={styles.authForm}>
+          {!isLogin && (
+            <div className={styles.formGroup}>
+              <label htmlFor="fullName" className={styles.label}>
+                <i className="fas fa-user"></i> Ваше имя
+              </label>
+              <input
+                type="text"
+                id="fullName"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                className={styles.input}
+                placeholder="Иван Иванов"
+                required={!isLogin}
+              />
+              <p className={styles.helpText}>
+                Это имя будет отображаться в правом верхнем углу
+              </p>
+            </div>
+          )}
+
           <div className={styles.formGroup}>
-            <label htmlFor="email">Email</label>
+            <label htmlFor="email" className={styles.label}>
+              <i className="fas fa-envelope"></i> Email
+            </label>
             <input
               type="email"
               id="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="your@email.com"
+              className={styles.input}
+              placeholder="example@mail.com"
               required
-              disabled={loading}
             />
           </div>
-          
+
           <div className={styles.formGroup}>
-            <label htmlFor="password">Пароль</label>
+            <label htmlFor="password" className={styles.label}>
+              <i className="fas fa-lock"></i> Пароль
+            </label>
             <input
               type="password"
               id="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Введите пароль"
+              className={styles.input}
+              placeholder="Минимум 6 символов"
               required
-              disabled={loading}
+              minLength={6}
             />
           </div>
-          
+
+          {error && (
+            <div className={styles.errorMessage}>
+              <i className="fas fa-exclamation-circle"></i> {error}
+            </div>
+          )}
+
           <button 
             type="submit" 
-            className={styles.submitBtn}
+            className={styles.submitButton}
             disabled={loading}
           >
             {loading ? (
               <>
-                <i className="fas fa-spinner fa-spin"></i> Вход...
+                <i className="fas fa-spinner fa-spin"></i> Обработка...
               </>
             ) : (
-              'Войти'
+              <>
+                <i className={isLogin ? 'fas fa-sign-in-alt' : 'fas fa-user-plus'}></i>
+                {isLogin ? 'Войти' : 'Зарегистрироваться'}
+              </>
             )}
           </button>
         </form>
-        
-        <div className={styles.authFooter}>
+
+        <div className={styles.authSwitch}>
           <p>
-            Нет аккаунта?{' '}
-            <Link href="/register" className={styles.link}>
-              Зарегистрируйтесь
-            </Link>
+            {isLogin ? 'Нет аккаунта?' : 'Уже есть аккаунт?'}
+            <button 
+              type="button" 
+              className={styles.switchButton}
+              onClick={() => {
+                setIsLogin(!isLogin);
+                setError('');
+              }}
+            >
+              {isLogin ? ' Зарегистрироваться' : ' Войти'}
+            </button>
           </p>
-          <Link href="/forgot-password" className={styles.link}>
-            Забыли пароль?
-          </Link>
         </div>
-        
-        <div className={styles.demoNote}>
-          <p><strong>Тестовый аккаунт:</strong>email: 2@2 / password: 123456</p>
+
+        <div className={styles.authLinks}>
+          <Link href="/" className={styles.homeLink}>
+            <i className="fas fa-home"></i> Вернуться на главную
+          </Link>
         </div>
       </div>
     </div>
