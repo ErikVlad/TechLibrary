@@ -1,324 +1,342 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import SidebarLayout from '@/components/main-block/sidebar/SidebarLayout';
-import FiltersSidebar from '@/components/books/FiltersSidebar/FiltersSidebar';
-import BookGrid from '@/components/books/BookGrid/BookGrid';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Book, Filters } from '@/lib/types';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
-import styles from './page.module.css';
+import styles from './FiltersSidebar.module.css';
 
-export default function LiteraturePage() {
-  const [books, setBooks] = useState<Book[]>([]);
-  const [filteredBooks, setFilteredBooks] = useState<Book[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [user, setUser] = useState<any>(null);
-  const booksPerPage = 12;
+interface FiltersSidebarProps {
+  books: Book[];
+  onFilterChange: (filters: Filters) => void;
+}
+
+export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebarProps) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  
+  // Отслеживаем пользователя для сброса фильтров
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const prevUserRef = useRef<any>(null);
+  
+  // Инициализируем состояние из URL параметров
+  const [search, setSearch] = useState(searchParams.get('search') || '');
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(
+    searchParams.get('categories')?.split(',') || []
+  );
+  const [selectedYear, setSelectedYear] = useState<string>(searchParams.get('year') || 'all');
+  const [selectedTags, setSelectedTags] = useState<string[]>(
+    searchParams.get('tags')?.split(',') || []
+  );
+  const [selectedAuthors, setSelectedAuthors] = useState<string[]>(
+    searchParams.get('authors')?.split(',') || []
+  );
+  const [yearFrom, setYearFrom] = useState(searchParams.get('yearFrom') || '');
+  const [yearTo, setYearTo] = useState(searchParams.get('yearTo') || '');
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Загружаем текущего пользователя
   useEffect(() => {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
+      setCurrentUser(user);
     };
     
     getUser();
     
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null);
+      setCurrentUser(session?.user || null);
     });
     
     return () => subscription.unsubscribe();
   }, []);
 
-  const loadBooks = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      console.log('Загрузка книг из Supabase...');
-      
-      const { data, error: supabaseError } = await supabase
-        .from('books')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (supabaseError) {
-        console.error('Ошибка Supabase:', supabaseError);
-        throw new Error(`Ошибка Supabase: ${supabaseError.message}`);
-      }
-      
-      if (!data || data.length === 0) {
-        console.log('В базе данных нет книг');
-        setBooks([]);
-        setFilteredBooks([]);
-        setError('В базе данных пока нет книг. Добавьте книги через админ-панель Supabase.');
-      } else {
-        const booksData: Book[] = data.map(book => ({
-          id: book.id,
-          title: book.title,
-          author: book.author,
-          description: book.description || '',
-          year: book.year,
-          pages: book.pages,
-          pdf_url: book.pdf_url || '#',
-          category: book.category || 'Не указана',
-          tags: book.tags || [],
-          created_at: book.created_at,
-          updated_at: book.updated_at
-        }));
-        
-        console.log('Преобразованные книги:', booksData);
-        setBooks(booksData);
-        setFilteredBooks(booksData);
-      }
-    } catch (error) {
-      console.error('Error loading books from Supabase:', error);
-      const err = error as Error;
-      setError(`Не удалось загрузить книги из базы данных: ${err.message}`);
-      setBooks([]);
-      setFilteredBooks([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Сбрасываем фильтры при смене пользователя
   useEffect(() => {
-    loadBooks();
-    
-    // Для Chrome: обработка видимости страницы
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && books.length === 0 && !loading) {
-        loadBooks();
-      }
+    if (prevUserRef.current?.id !== currentUser?.id) {
+      console.log('Смена пользователя, сбрасываю фильтры');
+      clearFilters();
+      prevUserRef.current = currentUser;
+    }
+  }, [currentUser]);
+
+  // Получаем уникальные значения из книг
+  const categories = Array.from(new Set(books.map(book => book.category)));
+  const tags = Array.from(new Set(books.flatMap(book => book.tags))).slice(0, 10);
+  const authors = Array.from(new Set(books.map(book => book.author)));
+
+  // Функция для применения фильтров с обновлением URL
+  const applyFilters = useCallback(() => {
+    const filters: Filters = {
+      search,
+      categories: selectedCategories,
+      year: selectedYear,
+      tags: selectedTags,
+      authors: selectedAuthors,
+      yearFrom,
+      yearTo
     };
     
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    // Обновляем URL параметры
+    const params = new URLSearchParams();
     
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [loadBooks, books.length, loading]);
+    if (search) params.set('search', search);
+    if (selectedCategories.length > 0) params.set('categories', selectedCategories.join(','));
+    if (selectedYear !== 'all') params.set('year', selectedYear);
+    if (selectedTags.length > 0) params.set('tags', selectedTags.join(','));
+    if (selectedAuthors.length > 0) params.set('authors', selectedAuthors.join(','));
+    if (yearFrom) params.set('yearFrom', yearFrom);
+    if (yearTo) params.set('yearTo', yearTo);
+    
+    // Обновляем URL без перезагрузки страницы
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    router.replace(newUrl, { scroll: false });
+    
+    // Передаем фильтры родительскому компоненту
+    onFilterChange(filters);
+  }, [search, selectedCategories, selectedYear, selectedTags, selectedAuthors, yearFrom, yearTo, router, onFilterChange]);
 
-  const handleFilterChange = (filters: Filters) => {
-    let filtered = [...books];
-
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      filtered = filtered.filter(book => 
-        book.title.toLowerCase().includes(searchLower) ||
-        book.author.toLowerCase().includes(searchLower) ||
-        book.description.toLowerCase().includes(searchLower)
-      );
-    }
-
-    if (filters.categories.length > 0) {
-      filtered = filtered.filter(book => 
-        filters.categories.includes(book.category)
-      );
-    }
-
-    if (filters.authors.length > 0) {
-      filtered = filtered.filter(book => 
-        filters.authors.includes(book.author)
-      );
-    }
-
-    if (filters.tags.length > 0) {
-      filtered = filtered.filter(book => 
-        book.tags.some(tag => filters.tags.includes(tag))
-      );
-    }
-
-    if (filters.year !== 'all') {
-      switch (filters.year) {
-        case '2025':
-          filtered = filtered.filter(book => book.year === 2025);
-          break;
-        case '2024':
-          filtered = filtered.filter(book => book.year === 2024);
-          break;
-        case '2023-2021':
-          filtered = filtered.filter(book => book.year >= 2021 && book.year <= 2023);
-          break;
-        case 'old':
-          filtered = filtered.filter(book => book.year < 2021);
-          break;
-      }
-    }
-
-    if (filters.yearFrom) {
-      const yearFromNum = parseInt(filters.yearFrom);
-      if (!isNaN(yearFromNum)) {
-        filtered = filtered.filter(book => book.year >= yearFromNum);
-      }
-    }
-    if (filters.yearTo) {
-      const yearToNum = parseInt(filters.yearTo);
-      if (!isNaN(yearToNum)) {
-        filtered = filtered.filter(book => book.year <= yearToNum);
-      }
-    }
-
-    setFilteredBooks(filtered);
-    setCurrentPage(1);
-  };
-
-  const handleBookSelect = (book: Book) => {
-    if (book.pdf_url && book.pdf_url !== '#') {
-      window.open(book.pdf_url, '_blank');
+  // Применяем фильтры при изменении состояния
+  useEffect(() => {
+    if (isInitialized) {
+      applyFilters();
     } else {
-      alert('Ссылка на PDF не указана для этой книги');
+      setIsInitialized(true);
+      // При первой загрузке сразу применяем фильтры из URL
+      applyFilters();
     }
+  }, [search, selectedCategories, selectedYear, selectedTags, selectedAuthors, yearFrom, yearTo]);
+
+  // Очистка фильтров
+  const clearFilters = () => {
+    setSearch('');
+    setSelectedCategories([]);
+    setSelectedYear('all');
+    setSelectedTags([]);
+    setSelectedAuthors([]);
+    setYearFrom('');
+    setYearTo('');
+    
+    // Очищаем URL
+    router.replace(window.location.pathname, { scroll: false });
   };
 
-  // Пагинация
-  const totalPages = Math.ceil(filteredBooks.length / booksPerPage);
-  const startIndex = (currentPage - 1) * booksPerPage;
-  const endIndex = startIndex + booksPerPage;
-  const currentBooks = filteredBooks.slice(startIndex, endIndex);
+  const handleCategoryToggle = (category: string) => {
+    setSelectedCategories(prev => 
+      prev.includes(category) 
+        ? prev.filter(c => c !== category)
+        : [...prev, category]
+    );
+  };
+
+  const handleTagToggle = (tag: string) => {
+    setSelectedTags(prev =>
+      prev.includes(tag)
+        ? prev.filter(t => t !== tag)
+        : [...prev, tag]
+    );
+  };
+
+  const handleAuthorToggle = (author: string) => {
+    setSelectedAuthors(prev =>
+      prev.includes(author)
+        ? prev.filter(a => a !== author)
+        : [...prev, author]
+    );
+  };
+
+  // Дебаунс для поиска
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearch(value);
+    
+    // Отменяем предыдущий таймаут
+    if (searchTimeout) clearTimeout(searchTimeout);
+    
+    // Устанавливаем новый таймаут для дебаунса
+    setSearchTimeout(
+      setTimeout(() => {
+        setSearch(value);
+      }, 300)
+    );
+  };
+
+  // Очищаем таймаут при размонтировании
+  useEffect(() => {
+    return () => {
+      if (searchTimeout) clearTimeout(searchTimeout);
+    };
+  }, [searchTimeout]);
 
   return (
-    <SidebarLayout
-      filters={
-        <FiltersSidebar
-          key={user?.id || 'anonymous'} // Важно: перемонтируем при смене пользователя
-          books={books}
-          onFilterChange={handleFilterChange}
-        />
-      }
-    >
-      <div className={styles.booksSection}>
-        <div className={styles.booksHeader}>
-          <div>
-            <h1>Каталог технической литературы</h1>
-            <p className={styles.booksCount}>
-              Показано <span>{filteredBooks.length}</span> из <span>{books.length}</span> книг
-              {error && ' (из базы данных)'}
-            </p>
-          </div>
-          <button 
-            className={styles.refreshBtn}
-            onClick={loadBooks}
-            disabled={loading}
-            title="Обновить список книг"
-          >
-            <i className={`fas fa-sync-alt ${loading ? 'fa-spin' : ''}`}></i>
-            {loading ? ' Загрузка...' : ' Обновить'}
-          </button>
-        </div>
-
-        {error && (
-          <div className={styles.errorContainer}>
-            <i className="fas fa-exclamation-triangle"></i>
-            <p>{error}</p>
-            <div className={styles.errorActions}>
-              <button onClick={loadBooks} className={styles.retryBtn}>
-                Попробовать снова
-              </button>
-              <a 
-                href="https://supabase.com/dashboard" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className={styles.supabaseLink}
-              >
-                Открыть Supabase
-              </a>
-            </div>
-          </div>
-        )}
-
-        {loading ? (
-          <div className={styles.loadingState}>
-            <div className={styles.loadingSpinner}></div>
-            <p>Загрузка книг из базы данных...</p>
-          </div>
-        ) : books.length === 0 ? (
-          <div className={styles.emptyState}>
-            <i className="fas fa-database"></i>
-            <h3>База данных пуста</h3>
-            <p>Добавьте книги через админ-панель Supabase</p>
-            <div className={styles.emptyActions}>
-              <button onClick={loadBooks} className={styles.retryBtn}>
-                Проверить снова
-              </button>
-              <a 
-                href="https://supabase.com/dashboard" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className={styles.supabaseLink}
-              >
-                Перейти в Supabase Dashboard
-              </a>
-            </div>
-          </div>
-        ) : (
-          <>
-            <BookGrid 
-              books={currentBooks} 
-              onBookSelect={handleBookSelect}
-            />
-            
-            {totalPages > 1 && (
-              <div className={styles.pagination}>
-                <button 
-                  className={styles.pageBtn}
-                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1}
-                >
-                  <i className="fas fa-chevron-left"></i>
-                </button>
-                
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (currentPage <= 3) {
-                    pageNum = i + 1;
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = currentPage - 2 + i;
-                  }
-                  
-                  return (
-                    <button
-                      key={pageNum}
-                      className={`${styles.pageBtn} ${currentPage === pageNum ? styles.active : ''}`}
-                      onClick={() => setCurrentPage(pageNum)}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-                
-                {totalPages > 5 && currentPage < totalPages - 2 && (
-                  <span className={styles.pageDots}>...</span>
-                )}
-                
-                {totalPages > 5 && currentPage < totalPages - 2 && (
-                  <button
-                    className={styles.pageBtn}
-                    onClick={() => setCurrentPage(totalPages)}
-                  >
-                    {totalPages}
-                  </button>
-                )}
-                
-                <button 
-                  className={styles.pageBtn}
-                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                  disabled={currentPage === totalPages}
-                >
-                  <i className="fas fa-chevron-right"></i>
-                </button>
-              </div>
-            )}
-          </>
-        )}
+    <div className={styles.filtersSidebar}>
+      <div className={styles.filtersHeader}>
+        <h2>Фильтры</h2>
+        <button className={styles.clearFilters} onClick={clearFilters}>
+          <i className="fas fa-times"></i> Сбросить
+        </button>
       </div>
-    </SidebarLayout>
+
+      <div className={styles.searchBox}>
+        <i className="fas fa-search search-icon"></i>
+        <input
+          type="text"
+          placeholder="Поиск книг..."
+          value={search}
+          onChange={handleSearchChange}
+        />
+      </div>
+
+      {/* Категории */}
+      <div className={styles.filterGroup}>
+        <div className={styles.filterTitle}>
+          <i className="fas fa-tag"></i>
+          <span>Категории</span>
+        </div>
+        <div className={styles.filterOptions}>
+          {categories.map(category => (
+            <div key={category} className={styles.filterOption}>
+              <input
+                type="checkbox"
+                id={`cat-${category}`}
+                checked={selectedCategories.includes(category)}
+                onChange={() => handleCategoryToggle(category)}
+              />
+              <label htmlFor={`cat-${category}`}>{category}</label>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Год издания */}
+      <div className={styles.filterGroup}>
+        <div className={styles.filterTitle}>
+          <i className="fas fa-calendar"></i>
+          <span>Год издания</span>
+        </div>
+        <div className={styles.filterOptions}>
+          <div className={styles.filterOption}>
+            <input
+              type="radio"
+              id="year-all"
+              name="year"
+              checked={selectedYear === 'all'}
+              onChange={() => setSelectedYear('all')}
+            />
+            <label htmlFor="year-all">Все года</label>
+          </div>
+          <div className={styles.filterOption}>
+            <input
+              type="radio"
+              id="year-2025"
+              name="year"
+              checked={selectedYear === '2025'}
+              onChange={() => setSelectedYear('2025')}
+            />
+            <label htmlFor="year-2025">2025</label>
+          </div>
+          <div className={styles.filterOption}>
+            <input
+              type="radio"
+              id="year-2024"
+              name="year"
+              checked={selectedYear === '2024'}
+              onChange={() => setSelectedYear('2024')}
+            />
+            <label htmlFor="year-2024">2024</label>
+          </div>
+          <div className={styles.filterOption}>
+            <input
+              type="radio"
+              id="year-2023"
+              name="year"
+              checked={selectedYear === '2023-2021'}
+              onChange={() => setSelectedYear('2023-2021')}
+            />
+            <label htmlFor="year-2023">2023-2021</label>
+          </div>
+          <div className={styles.filterOption}>
+            <input
+              type="radio"
+              id="year-old"
+              name="year"
+              checked={selectedYear === 'old'}
+              onChange={() => setSelectedYear('old')}
+            />
+            <label htmlFor="year-old">До 2021</label>
+          </div>
+        </div>
+        
+        <div className={styles.yearRange}>
+          <input
+            type="number"
+            placeholder="От"
+            value={yearFrom}
+            onChange={(e) => setYearFrom(e.target.value)}
+            min="1900"
+            max="2100"
+          />
+          <span>—</span>
+          <input
+            type="number"
+            placeholder="До"
+            value={yearTo}
+            onChange={(e) => setYearTo(e.target.value)}
+            min="1900"
+            max="2100"
+          />
+        </div>
+      </div>
+
+      {/* Авторы */}
+      <div className={styles.filterGroup}>
+        <div className={styles.filterTitle}>
+          <i className="fas fa-user"></i>
+          <span>Авторы</span>
+        </div>
+        <div className={styles.filterOptions}>
+          {authors.slice(0, 5).map(author => (
+            <div key={author} className={styles.filterOption}>
+              <input
+                type="checkbox"
+                id={`author-${author}`}
+                checked={selectedAuthors.includes(author)}
+                onChange={() => handleAuthorToggle(author)}
+              />
+              <label htmlFor={`author-${author}`}>{author}</label>
+            </div>
+          ))}
+          {authors.length > 5 && (
+            <div className={styles.moreAuthors}>
+              <i className="fas fa-ellipsis-h"></i> еще {authors.length - 5} авторов
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Теги */}
+      <div className={styles.filterGroup}>
+        <div className={styles.filterTitle}>
+          <i className="fas fa-hashtag"></i>
+          <span>Популярные теги</span>
+        </div>
+        <div className={styles.tagsContainer}>
+          {tags.map(tag => (
+            <span
+              key={tag}
+              className={`${styles.tag} ${selectedTags.includes(tag) ? styles.active : ''}`}
+              onClick={() => handleTagToggle(tag)}
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <button className={styles.applyButton} onClick={applyFilters}>
+        <i className="fas fa-filter"></i> Применить фильтры
+      </button>
+    </div>
   );
 }
