@@ -14,7 +14,24 @@ export default function LiteraturePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [user, setUser] = useState<any>(null);
   const booksPerPage = 12;
+
+  // Загрузка текущего пользователя
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+    };
+    
+    getUser();
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+    
+    return () => subscription.unsubscribe();
+  }, []);
 
   const loadBooks = useCallback(async () => {
     try {
@@ -23,7 +40,6 @@ export default function LiteraturePage() {
       
       console.log('Загрузка книг из Supabase...');
       
-      // ТОЛЬКО загрузка из Supabase
       const { data, error: supabaseError } = await supabase
         .from('books')
         .select('*')
@@ -42,7 +58,6 @@ export default function LiteraturePage() {
         setFilteredBooks([]);
         setError('В базе данных пока нет книг. Добавьте книги через админ-панель Supabase.');
       } else {
-        // Преобразуем данные к типу Book
         const booksData: Book[] = data.map(book => ({
           id: book.id,
           title: book.title,
@@ -96,7 +111,7 @@ export default function LiteraturePage() {
       );
     }
 
-    // Фильтр по авторам (НОВЫЙ ФИЛЬТР вместо языка)
+    // Фильтр по авторам
     if (filters.authors.length > 0) {
       filtered = filtered.filter(book => 
         filters.authors.includes(book.author)
@@ -147,7 +162,6 @@ export default function LiteraturePage() {
   };
 
   const handleBookSelect = (book: Book) => {
-    // Открываем PDF в новой вкладке
     if (book.pdf_url && book.pdf_url !== '#') {
       window.open(book.pdf_url, '_blank');
     } else {
@@ -165,6 +179,7 @@ export default function LiteraturePage() {
     <SidebarLayout
       filters={
         <FiltersSidebar
+          key={user?.id || 'anonymous'} // Ключевое изменение: перемонтирование компонента при смене пользователя
           books={books}
           onFilterChange={handleFilterChange}
         />
