@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Book, Filters } from '@/lib/types';
 import { useSearchParams, useRouter } from 'next/navigation';
 import styles from './FiltersSidebar.module.css';
@@ -8,9 +8,10 @@ import styles from './FiltersSidebar.module.css';
 interface FiltersSidebarProps {
   books: Book[];
   onFilterChange: (filters: Filters) => void;
+  externalReset?: string;  // Новый пропс
 }
 
-export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebarProps) {
+export default function FiltersSidebar({ books, onFilterChange, externalReset }: FiltersSidebarProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   
@@ -34,6 +35,9 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
   const categories = Array.from(new Set(books.map(book => book.category)));
   const tags = Array.from(new Set(books.flatMap(book => book.tags))).slice(0, 10);
   const authors = Array.from(new Set(books.map(book => book.author)));
+
+  // Создаем уникальный идентификатор набора книг для отслеживания изменений
+  const booksHash = books.map(b => b.id).sort().join(',');
 
   // Функция для применения фильтров с обновлением URL
   const applyFilters = useCallback(() => {
@@ -78,7 +82,7 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
   }, [search, selectedCategories, selectedYear, selectedTags, selectedAuthors, yearFrom, yearTo]);
 
   // Очистка фильтров
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setSearch('');
     setSelectedCategories([]);
     setSelectedYear('all');
@@ -89,7 +93,19 @@ export default function FiltersSidebar({ books, onFilterChange }: FiltersSidebar
     
     // Очищаем URL
     router.replace(window.location.pathname, { scroll: false });
-  };
+  }, [router]);
+
+  // Сброс фильтров при изменении набора книг или externalReset
+  const prevResetRef = useRef({ booksHash, externalReset });
+  useEffect(() => {
+    // Если компонент уже инициализирован и (набор книг изменился или externalReset изменился)
+    if (isInitialized && 
+        (prevResetRef.current.booksHash !== booksHash || 
+         prevResetRef.current.externalReset !== externalReset)) {
+      clearFilters();
+      prevResetRef.current = { booksHash, externalReset };
+    }
+  }, [booksHash, externalReset, isInitialized, clearFilters]);
 
   const handleCategoryToggle = (category: string) => {
     setSelectedCategories(prev => 
