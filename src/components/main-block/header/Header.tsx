@@ -4,14 +4,60 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useTheme } from '@/components/providers/ThemeProvider';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { supabase } from '@/lib/supabase/client';
 import styles from './Header.module.css';
 
 export default function Header() {
   const { theme, toggleTheme } = useTheme();
   const { user, signOut, loading } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [userName, setUserName] = useState<string>('');
   const dropdownRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Загружаем имя пользователя из профиля
+  useEffect(() => {
+    const loadUserName = async () => {
+      if (user) {
+        try {
+          // Пробуем получить имя из профиля в таблице profiles
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, username')
+            .eq('id', user.id)
+            .single();
+          
+          // Получаем имя в порядке приоритета:
+          // 1. full_name из профиля
+          // 2. username из профиля  
+          // 3. name из user_metadata
+          // 4. email (без домена)
+          const name = 
+            profile?.full_name || 
+            profile?.username || 
+            user.user_metadata?.full_name ||
+            user.user_metadata?.name || 
+            user.email?.split('@')[0] || 
+            'Пользователь';
+          
+          setUserName(name);
+        } catch (error) {
+          console.error('Ошибка загрузки имени:', error);
+          // Если ошибка, используем данные из метаданных
+          const fallbackName = 
+            user.user_metadata?.full_name ||
+            user.user_metadata?.name || 
+            user.email?.split('@')[0] || 
+            'Пользователь';
+          setUserName(fallbackName);
+        }
+      } else {
+        setUserName('');
+      }
+    };
+
+    loadUserName();
+  }, [user]);
 
   // Обработка клика вне выпадающего меню
   useEffect(() => {
@@ -43,7 +89,6 @@ export default function Header() {
   };
 
   const handleMouseLeave = () => {
-    // Задержка перед закрытием
     timeoutRef.current = setTimeout(() => {
       setDropdownOpen(false);
     }, 300);
@@ -51,21 +96,12 @@ export default function Header() {
 
   const handleLogout = async () => {
     try {
-      // Сбрасываем состояние
       setDropdownOpen(false);
-      
-      // Даем небольшую задержку для UX
       await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Вызываем выход
       await signOut();
-      
-      // Перенаправляем на главную
       window.location.href = '/';
-      
     } catch (error) {
       console.error('Ошибка при выходе:', error);
-      // Принудительная перезагрузка
       window.location.href = '/';
     }
   };
@@ -92,7 +128,7 @@ export default function Header() {
             >
               <span className={styles.userName}>
                 <i className="fas fa-user"></i> 
-                {user.user_metadata?.name || user.email?.split('@')[0]}
+                {userName}
               </span>
               {dropdownOpen && (
                 <div 
