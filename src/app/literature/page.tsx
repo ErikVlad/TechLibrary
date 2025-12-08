@@ -17,7 +17,7 @@ export default function LiteraturePage() {
   const [user, setUser] = useState<any>(null);
   const booksPerPage = 12;
 
-  // Загрузка текущего пользователя
+  // Загружаем текущего пользователя
   useEffect(() => {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -49,8 +49,6 @@ export default function LiteraturePage() {
         console.error('Ошибка Supabase:', supabaseError);
         throw new Error(`Ошибка Supabase: ${supabaseError.message}`);
       }
-
-      console.log('Данные получены из Supabase:', data);
       
       if (!data || data.length === 0) {
         console.log('В базе данных нет книг');
@@ -89,12 +87,24 @@ export default function LiteraturePage() {
 
   useEffect(() => {
     loadBooks();
-  }, [loadBooks]);
+    
+    // Для Chrome: обработка видимости страницы
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && books.length === 0 && !loading) {
+        loadBooks();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [loadBooks, books.length, loading]);
 
   const handleFilterChange = (filters: Filters) => {
     let filtered = [...books];
 
-    // Поиск по названию и автору
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
       filtered = filtered.filter(book => 
@@ -104,28 +114,24 @@ export default function LiteraturePage() {
       );
     }
 
-    // Фильтр по категориям
     if (filters.categories.length > 0) {
       filtered = filtered.filter(book => 
         filters.categories.includes(book.category)
       );
     }
 
-    // Фильтр по авторам
     if (filters.authors.length > 0) {
       filtered = filtered.filter(book => 
         filters.authors.includes(book.author)
       );
     }
 
-    // Фильтр по тегам
     if (filters.tags.length > 0) {
       filtered = filtered.filter(book => 
         book.tags.some(tag => filters.tags.includes(tag))
       );
     }
 
-    // Фильтр по году
     if (filters.year !== 'all') {
       switch (filters.year) {
         case '2025':
@@ -143,7 +149,6 @@ export default function LiteraturePage() {
       }
     }
 
-    // Фильтр по диапазону лет
     if (filters.yearFrom) {
       const yearFromNum = parseInt(filters.yearFrom);
       if (!isNaN(yearFromNum)) {
@@ -179,7 +184,7 @@ export default function LiteraturePage() {
     <SidebarLayout
       filters={
         <FiltersSidebar
-          key={user?.id || 'anonymous'} // Ключевое изменение: перемонтирование компонента при смене пользователя
+          key={user?.id || 'anonymous'} // Важно: перемонтируем при смене пользователя
           books={books}
           onFilterChange={handleFilterChange}
         />
