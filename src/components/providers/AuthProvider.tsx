@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Проверяем активную сессию
+    // Получаем текущую сессию
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -86,9 +86,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         
         if (event === 'SIGNED_OUT') {
-          // Очищаем localStorage при выходе
-          localStorage.removeItem('sb-auth-token');
-          localStorage.removeItem('supabase.auth.token');
           router.push('/');
         }
         
@@ -120,7 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         data: {
           full_name: name,
         },
-        emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined,
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       }
     });
 
@@ -149,25 +146,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { error } = await supabase.auth.signOut({ scope: 'local' });
       
       if (error) {
-        console.error('Ошибка при выходе:', error);
-        // Если стандартный выход не работает, очищаем вручную
-        localStorage.removeItem('sb-auth-token');
-        localStorage.removeItem('supabase.auth.token');
-        sessionStorage.removeItem('sb-auth-token');
-        sessionStorage.removeItem('supabase.auth.token');
+        console.warn('Ошибка при стандартном выходе:', error);
+        // Очищаем вручную
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('sb-auth-token');
+          localStorage.removeItem('supabase.auth.token');
+          sessionStorage.removeItem('sb-auth-token');
+          sessionStorage.removeItem('supabase.auth.token');
+        }
       }
       
-      // В любом случае сбрасываем состояние
+      // Очищаем состояние
       setUser(null);
       setSession(null);
       
     } catch (err) {
       console.error('Критическая ошибка при выходе:', err);
       // Принудительная очистка
-      localStorage.removeItem('sb-auth-token');
-      localStorage.removeItem('supabase.auth.token');
-      sessionStorage.removeItem('sb-auth-token');
-      sessionStorage.removeItem('supabase.auth.token');
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('sb-auth-token');
+        localStorage.removeItem('supabase.auth.token');
+        sessionStorage.removeItem('sb-auth-token');
+        sessionStorage.removeItem('supabase.auth.token');
+      }
     }
   };
 
